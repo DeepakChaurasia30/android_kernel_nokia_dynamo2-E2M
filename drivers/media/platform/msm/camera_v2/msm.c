@@ -424,7 +424,9 @@ int msm_sd_unregister(struct msm_sd_subdev *msm_subdev)
 {
 	if (WARN_ON(!msm_subdev))
 		return -EINVAL;
-
+//misty E2MP camera porting++
+	list_del(&msm_subdev->list);
+//misty E2MP camera porting--
 	v4l2_device_unregister_subdev(&msm_subdev->sd);
 	return 0;
 }

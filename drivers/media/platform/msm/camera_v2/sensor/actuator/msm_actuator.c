@@ -16,6 +16,7 @@
 #include "msm_sd.h"
 #include "msm_actuator.h"
 #include "msm_cci.h"
+#include "../fih/fih_bbs_camera.h" //FihtdcCode@Alan, add BBS log
 
 DEFINE_MSM_MUTEX(msm_actuator_mutex);
 
@@ -39,6 +40,16 @@ static struct msm_actuator msm_vcm_actuator_table;
 static struct msm_actuator msm_piezo_actuator_table;
 static struct msm_actuator msm_hvcm_actuator_table;
 static struct msm_actuator msm_bivcm_actuator_table;
+
+//FihtdcCode@Alan, add BBS log
+extern void fih_bbs_camera_msg_by_addr(int, int);
+
+//SW4-RL-Camera BBS log-00+{_20170216
+extern void fih_bbs_camera_msg_by_soensor_info(int, const char *, int, const char *, int);
+extern const char *actuatorName;
+extern const char *sensorName;
+extern int pos;
+//SW4-RL-Camera BBS log-00+}_20170216
 
 static struct i2c_driver msm_actuator_i2c_driver;
 static struct msm_actuator *actuators[] = {
@@ -1480,8 +1491,23 @@ static int32_t msm_actuator_config(struct msm_actuator_ctrl_t *a_ctrl,
 		break;
 	case CFG_ACTUATOR_POWERDOWN:
 		rc = msm_actuator_power_down(a_ctrl);
+		//pr_err("%s:%d, actuatorName = %s\n",  __func__, __LINE__, actuatorName);
+		//pr_err("%s:%d, position= %d\n", __func__, __LINE__, pos);
+                //pr_err("%s:%d, (ACTUATOR_POWERDOWN) i2c_addr= 0x%x\n", __func__, __LINE__, a_ctrl->i2c_client.cci_client->sid);
+
+                //SW4-RL-Camera BBS log-00+_20170216
+		//fih_bbs_camera_msg_by_soensor_info(a_ctrl->i2c_client.cci_client->sid,
+		//	NULL, pos, actuatorName, FIH_BBS_CAMERA_ERRORCODE_POWER_DW);
+
 		if (rc < 0)
+		{
 			pr_err("msm_actuator_power_down failed %d\n", rc);
+			//FihtdcCode@Alan, add BBS log
+			//fih_bbs_camera_msg_by_addr(a_ctrl->i2c_client.cci_client->sid, FIH_BBS_CAMERA_ERRORCODE_POWER_DW);
+			//SW4-RL-Camera BBS log-00+_20170216
+			fih_bbs_camera_msg_by_soensor_info(a_ctrl->i2c_client.cci_client->sid,
+				NULL, pos, actuatorName, FIH_BBS_CAMERA_ERRORCODE_POWER_DW);
+		}
 		break;
 
 	case CFG_SET_POSITION:
@@ -1495,8 +1521,23 @@ static int32_t msm_actuator_config(struct msm_actuator_ctrl_t *a_ctrl,
 
 	case CFG_ACTUATOR_POWERUP:
 		rc = msm_actuator_power_up(a_ctrl);
+		//pr_err("%s:%d, actuatorName = %s\n",  __func__, __LINE__, actuatorName);
+		//pr_err("%s:%d, position= %d\n", __func__, __LINE__, pos);
+		//pr_err("%s:%d, (ACTUATOR_POWERUP) i2c_addr= 0x%x\n", __func__, __LINE__, a_ctrl->i2c_client.cci_client->sid<<1);
+
+		//SW4-RL-Camera BBS log-00+_20170216
+		//fih_bbs_camera_msg_by_soensor_info(a_ctrl->i2c_client.cci_client->sid,
+		//	NULL, pos, actuatorName, FIH_BBS_CAMERA_ERRORCODE_POWER_UP);
+
 		if (rc < 0)
+		{
 			pr_err("Failed actuator power up%d\n", rc);
+			//FihtdcCode@Alan, add BBS log
+			//fih_bbs_camera_msg_by_addr(a_ctrl->i2c_client.cci_client->sid, FIH_BBS_CAMERA_ERRORCODE_POWER_UP);
+			//SW4-RL-Camera BBS log-00+_20170216
+			fih_bbs_camera_msg_by_soensor_info(a_ctrl->i2c_client.cci_client->sid,
+				NULL, pos, actuatorName, FIH_BBS_CAMERA_ERRORCODE_POWER_UP);
+		}
 		break;
 
 	default:

@@ -1712,7 +1712,28 @@ void msm_vfe47_cfg_axi_ub_equal_default(
 	uint32_t prop_size = 0;
 	uint32_t wm_ub_size;
 	uint64_t delta;
+//JYLee applied QC patch (case 03865375) for AF issue 20190201 [
+	uint32_t rdi_ub_offset;
 
+	if (frame_src == VFE_PIX_0) {
+		for (i = 0; i < axi_data->hw_info->num_wm; i++) {
+			if (axi_data->free_wm[i] &&
+				SRC_TO_INTF(
+				HANDLE_TO_IDX(axi_data->free_wm[i])) ==
+				VFE_PIX_0) {
+				num_used_wms++;
+				total_image_size +=
+					axi_data->wm_image_size[i];
+			}
+		}
+		ub_offset = (axi_data->hw_info->num_rdi * 2) *
+			axi_data->hw_info->min_wm_ub;
+		prop_size = vfe_dev->hw_info->vfe_ops.axi_ops.
+			get_ub_size(vfe_dev) -
+			axi_data->hw_info->min_wm_ub * (num_used_wms +
+			axi_data->hw_info->num_rdi * 2);
+	}
+/*
 	for (i = 0; i < axi_data->hw_info->num_wm; i++) {
 		if (axi_data->free_wm[i]) {
 			num_used_wms++;
@@ -1727,6 +1748,44 @@ void msm_vfe47_cfg_axi_ub_equal_default(
 	prop_size = vfe_dev->hw_info->vfe_ops.axi_ops.
 		get_ub_size(vfe_dev) -
 		axi_data->hw_info->min_wm_ub * num_used_wms;
+*/
+	for (i = 0; i < axi_data->hw_info->num_wm; i++) {
+		if (!axi_data->free_wm[i]) {
+			msm_camera_io_w(0,
+				vfe_dev->vfe_base +
+				vfe_dev->hw_info->vfe_ops.axi_ops.
+					ub_reg_offset(vfe_dev, i));
+		}
+		if (!axi_data->free_wm[i] || frame_src != SRC_TO_INTF(
+				HANDLE_TO_IDX(axi_data->free_wm[i])))
+			continue;
+
+		if (frame_src == VFE_PIX_0) {
+			delta = (uint64_t)axi_data->wm_image_size[i] *
+				(uint64_t)prop_size;
+				do_div(delta, total_image_size);
+				wm_ub_size = axi_data->hw_info->min_wm_ub +
+					(uint32_t)delta;
+			msm_camera_io_w(ub_offset << 16 | (wm_ub_size - 1),
+				vfe_dev->vfe_base +
+				vfe_dev->hw_info->vfe_ops.axi_ops.
+					ub_reg_offset(vfe_dev, i));
+			ub_offset += wm_ub_size;
+		} else {
+
+			rdi_ub_offset = (SRC_TO_INTF(
+					HANDLE_TO_IDX(axi_data->free_wm[i])) -
+					VFE_RAW_0) * 2 *
+					axi_data->hw_info->min_wm_ub;
+			wm_ub_size = axi_data->hw_info->min_wm_ub * 2;
+			msm_camera_io_w((rdi_ub_offset << 16 |
+				(wm_ub_size - 1)),
+				vfe_dev->vfe_base +
+				vfe_dev->hw_info->vfe_ops.axi_ops.
+						ub_reg_offset(vfe_dev, i));
+		}
+	}
+/*
 	for (i = 0; i < axi_data->hw_info->num_wm; i++) {
 		if (!axi_data->free_wm[i]) {
 			msm_camera_io_w(0,
@@ -1752,6 +1811,8 @@ void msm_vfe47_cfg_axi_ub_equal_default(
 				ub_reg_offset(vfe_dev, i));
 		ub_offset += wm_ub_size;
 	}
+*/
+//JYLee applied QC patch (case 03865375) for AF issue 20190201 ]
 }
 
 void msm_vfe47_cfg_axi_ub_equal_slicing(

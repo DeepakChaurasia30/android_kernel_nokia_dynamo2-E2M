@@ -8,3 +8,6 @@ obj-$(CONFIG_MSMB_CAMERA) += msm_led_trigger.o
 obj-$(CONFIG_MSMB_CAMERA) += msm_led_i2c_trigger.o
 obj-$(CONFIG_MSMB_CAMERA) += adp1660.o
 obj-$(CONFIG_MSMB_CAMERA) += msm_led_torch.o
+#misty E2MP camera porting++
+obj-y +=msm_flash_lm36010.o
+#misty E2MP camera porting--

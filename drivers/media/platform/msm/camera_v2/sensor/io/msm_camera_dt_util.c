@@ -1797,9 +1797,10 @@ int msm_camera_power_down(struct msm_camera_power_ctrl_t *ctrl,
 					pr_err("%s:%d:seq_val:%d > num_vreg: %d\n",
 						__func__, __LINE__, pd->seq_val,
 						ctrl->num_vreg);
-			} else
+			} else {
 				pr_err("%s error in power up/down seq data\n",
 								__func__);
+			}
 			ret = msm_cam_sensor_handle_reg_gpio(pd->seq_val,
 				ctrl->gpio_conf, GPIOF_OUT_INIT_LOW);
 			if (ret < 0)

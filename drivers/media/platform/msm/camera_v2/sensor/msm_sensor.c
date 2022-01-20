@@ -17,9 +17,27 @@
 #include "msm_camera_i2c_mux.h"
 #include <linux/regulator/rpm-smd-regulator.h>
 #include <linux/regulator/consumer.h>
+#include "fih/fih_bbs_camera.h" //FihtdcCode@Alan, add BBS log
+#include "fih_msm_sensor_recover.h" //fihtdc,derekcwwu add
 
 #undef CDBG
 #define CDBG(fmt, args...) pr_debug(fmt, ##args)
+
+//FihtdcCode@Alan, add BBS log
+extern void fih_bbs_camera_msg_by_addr(int, int);
+
+//SW4-RL-Camera BBS log-00+{_20170216
+extern void fih_bbs_camera_msg_by_soensor_info(int, const char *, int, const char *, int);
+const char *actuatorName;
+EXPORT_SYMBOL(actuatorName);
+//#include <linux/ctype.h>
+
+const char *sensorName;
+EXPORT_SYMBOL(sensorName);
+
+int pos = 0;
+EXPORT_SYMBOL(pos);
+//SW4-RL-Camera BBS log-00+}_20170216
 
 static struct msm_camera_i2c_fn_t msm_sensor_cci_func_tbl;
 static struct msm_camera_i2c_fn_t msm_sensor_secure_func_tbl;
@@ -240,13 +258,22 @@ static uint16_t msm_sensor_id_by_mask(struct msm_sensor_ctrl_t *s_ctrl,
 int msm_sensor_match_id(struct msm_sensor_ctrl_t *s_ctrl)
 {
 	int rc = 0;
-	uint16_t chipid = 0;
+    uint16_t chipid = 0;
+//misty E2MP camera porting++
+	int gc = 0;
+	int info_index;
+	int addr;
+	uint16_t s5k_read = 0;
+	uint16_t gc_read[12] = {0};
+	uint8_t flag_info;
+	uint16_t gc_id;
+//misty E2MP camera porting--
 	struct msm_camera_i2c_client *sensor_i2c_client;
 	struct msm_camera_slave_info *slave_info;
 	const char *sensor_name;
-
+    //pr_err("[MIMIm]%s:%d ++++++\n",__func__, __LINE__);
 	if (!s_ctrl) {
-		pr_err("%s:%d failed: %pK\n",
+		pr_err("[MIMIm]%s:%d failed: %pK\n",
 			__func__, __LINE__, s_ctrl);
 		return -EINVAL;
 	}
@@ -255,7 +282,7 @@ int msm_sensor_match_id(struct msm_sensor_ctrl_t *s_ctrl)
 	sensor_name = s_ctrl->sensordata->sensor_name;
 
 	if (!sensor_i2c_client || !slave_info || !sensor_name) {
-		pr_err("%s:%d failed: %pK %pK %pK\n",
+		pr_err("[MIMIm]%s:%d failed: %pK %pK %pK\n",
 			__func__, __LINE__, sensor_i2c_client, slave_info,
 			sensor_name);
 		return -EINVAL;
@@ -265,17 +292,165 @@ int msm_sensor_match_id(struct msm_sensor_ctrl_t *s_ctrl)
 		sensor_i2c_client, slave_info->sensor_id_reg_addr,
 		&chipid, MSM_CAMERA_I2C_WORD_DATA);
 	if (rc < 0) {
-		pr_err("%s: %s: read id failed\n", __func__, sensor_name);
+		pr_err("[MIMIm]%s: %s: read id failed\n", __func__, sensor_name);
 		return rc;
 	}
+//misty E2MP camera porting++ //to distinguish different module vendor. front:3  main:2
+    switch(chipid){
+		//front:gc5025
+        case 0x5025:
+        {
+			sensor_i2c_client->i2c_func_tbl->i2c_write(
+					sensor_i2c_client, 0xfe, 0x00,
+					MSM_CAMERA_I2C_BYTE_DATA);
+			sensor_i2c_client->i2c_func_tbl->i2c_write(
+					sensor_i2c_client, 0xfe, 0x00,
+					MSM_CAMERA_I2C_BYTE_DATA);
+			sensor_i2c_client->i2c_func_tbl->i2c_write(
+					sensor_i2c_client, 0xfe, 0x00,
+					MSM_CAMERA_I2C_BYTE_DATA);
 
-	pr_debug("%s: read id: 0x%x expected id 0x%x:\n",
-			__func__, chipid, slave_info->sensor_id);
-	if (msm_sensor_id_by_mask(s_ctrl, chipid) != slave_info->sensor_id) {
-		pr_err("%s chip id %x does not match %x\n",
-				__func__, chipid, slave_info->sensor_id);
-		return -ENODEV;
-	}
+			sensor_i2c_client->i2c_func_tbl->i2c_write(
+					sensor_i2c_client, 0xf7, 0x01,
+					MSM_CAMERA_I2C_BYTE_DATA);
+			sensor_i2c_client->i2c_func_tbl->i2c_write(
+					sensor_i2c_client, 0xf9, 0x00,
+					MSM_CAMERA_I2C_BYTE_DATA);
+			sensor_i2c_client->i2c_func_tbl->i2c_write(
+					sensor_i2c_client, 0xfa, 0xb0,
+					MSM_CAMERA_I2C_BYTE_DATA);
+			sensor_i2c_client->i2c_func_tbl->i2c_write(
+					sensor_i2c_client, 0xfc, 0x2e,
+					MSM_CAMERA_I2C_BYTE_DATA);
+			sensor_i2c_client->i2c_func_tbl->i2c_write(
+					sensor_i2c_client, 0xd4, 0x80,
+					MSM_CAMERA_I2C_BYTE_DATA);
+
+			sensor_i2c_client->i2c_func_tbl->i2c_write(
+					sensor_i2c_client, 0xd4, 0x84,
+					MSM_CAMERA_I2C_BYTE_DATA);
+			sensor_i2c_client->i2c_func_tbl->i2c_write(
+					sensor_i2c_client, 0xd5, 0x00,
+					MSM_CAMERA_I2C_BYTE_DATA);
+			sensor_i2c_client->i2c_func_tbl->i2c_write(
+					sensor_i2c_client, 0xf3, 0x20,
+					MSM_CAMERA_I2C_BYTE_DATA);
+			sensor_i2c_client->i2c_func_tbl->i2c_write(
+					sensor_i2c_client, 0xf3, 0x88,
+					MSM_CAMERA_I2C_BYTE_DATA);
+			msleep(1);
+
+			for(gc = 0; gc < 12; gc++) {
+			//msleep(1);
+
+			    rc =  sensor_i2c_client->i2c_func_tbl->i2c_read(
+						sensor_i2c_client, 0xd7, &gc_read[gc],
+						MSM_CAMERA_I2C_BYTE_DATA);
+				if (rc < 0) {
+	                pr_err("[MIMIm]%s:gc_read read failed\n",__func__);
+				}
+                else{
+                    pr_err("[MIMIm]gc_read[%d]==0x%x\n",gc,gc_read[gc]);
+                }
+            }
+
+			flag_info = (uint8_t)(gc_read[0]);
+			if (0x10 == (flag_info & 0x30))
+				info_index = 0;
+			else if (0x40 == (flag_info & 0xC0))
+				info_index = 1;
+			else {
+                pr_err("[MIMIm]gc5025 otp info is Empty/Invalid!");
+	            return -1;
+            }
+
+	        addr = 1 + info_index * 8;
+            gc_id = gc_read[addr];
+
+	        pr_err("[MIMIm]%s: read id: 0x%x slave_info id 0x%x:  gc_id==0x%x :\n",
+			__func__, chipid, slave_info->sensor_id,gc_id);
+            if(gc_id==0x06||gc_id ==0x15||gc_id ==0x11){
+	            if ((msm_sensor_id_by_mask(s_ctrl, chipid) != 0x5025)||(gc_id!=slave_info->sensor_id)) {
+		            pr_err("[MIMIm]%s chip id %x does not match %x\n",__func__, chipid, slave_info->sensor_id);
+		            return -ENODEV;
+                }
+            }else{
+                pr_err("[MIMIm]%s: other gc5025 read id: 0x%x slave_info id 0x%x:  gc_id==0x%x :\n",__func__, chipid, slave_info->sensor_id,gc_id);
+                if ((msm_sensor_id_by_mask(s_ctrl, chipid) != 0x5025)) {
+		            pr_err("[MIMIm]%s chip id %x does not match %x\n",__func__, chipid, slave_info->sensor_id);
+		            return -ENODEV;
+	            }
+            }
+        }//chipid:0x5025
+		break;
+		//main:s5k4h7
+        case 0x487B:
+        {
+			sensor_i2c_client->i2c_func_tbl->i2c_write(
+				    sensor_i2c_client, 0x0100, 0x01,
+				    MSM_CAMERA_I2C_WORD_DATA);
+			msleep(50);
+			sensor_i2c_client->i2c_func_tbl->i2c_write(
+				    sensor_i2c_client, 0x0A02, 0x17,
+				    MSM_CAMERA_I2C_BYTE_DATA);
+			sensor_i2c_client->i2c_func_tbl->i2c_write(
+				    sensor_i2c_client, 0x0A00, 0x01,
+				    MSM_CAMERA_I2C_BYTE_DATA);
+			msleep(50);
+
+		//read flag ID data
+            do
+	        {
+	            msleep(1);
+	            rc =  sensor_i2c_client->i2c_func_tbl->i2c_read(
+	           	        sensor_i2c_client, 0x0A01, &s5k_read,
+				        MSM_CAMERA_I2C_BYTE_DATA);
+
+		        if (rc < 0) {
+		            pr_err("[MIMIm]%s: 4h7_otp read failed\n",__func__);
+		        }
+                else{
+                    pr_err("[MIMIm]%s: sensorid5kaddr==0x%x,data==0x%x\n",__func__,0x0A01,s5k_read);
+                }
+			}while ((s5k_read & 0x01)  !=1);
+
+			rc = sensor_i2c_client->i2c_func_tbl->i2c_read(
+			    	sensor_i2c_client, 0x0A05, &s5k_read,MSM_CAMERA_I2C_BYTE_DATA);
+			if (rc < 0) {
+	            pr_err("[MIMIm]%s: read failed\n",__func__);
+			}
+            else{
+                pr_err("[MIMIm]%s: sensorids5kaddr==0x%x,data==0x%x\n",__func__,0x0A05,s5k_read);
+            }
+			
+	        pr_err("[MIMIm]%s: read id: 0x%x expected id 0x%x:\n",__func__, chipid, slave_info->sensor_id);
+            if(s5k_read==0x01||s5k_read==0x05)
+            {
+		        if ((msm_sensor_id_by_mask(s_ctrl, chipid) != 0x487B)||(s5k_read!=slave_info->sensor_id)) {
+			        pr_err("[MIMIm]%s chip id %x does not match %x\n",__func__, chipid, slave_info->sensor_id);
+			        return -ENODEV;
+		        }
+            }else{
+                    pr_err("[MIMIm]%s: other s5k4h7 read id: 0x%x expected id 0x%x:s5k_read==0x%x:\n",__func__, chipid, slave_info->sensor_id,s5k_read);
+                    if ((msm_sensor_id_by_mask(s_ctrl, chipid) != 0x487B)) {
+	                    pr_err("[MIMIm]%s chip id %x does not match %x\n",__func__, chipid, slave_info->sensor_id);
+			            return -ENODEV;
+		            }
+            }
+        }//chipid:0x487B
+		break;
+		default:
+		{
+			pr_err("[MIMIm]%s: read id: 0x%x expected id 0x%x:\n",__func__, chipid, slave_info->sensor_id);
+	        if (msm_sensor_id_by_mask(s_ctrl, chipid) != slave_info->sensor_id) {
+		        pr_err("[MIMIm]%s chip id %x does not match %x\n",__func__, chipid, slave_info->sensor_id);
+		        return -ENODEV;
+	        }
+		}
+		break;
+	}//switch
+//misty E2MP camera porting--
+	 //pr_err("[MIMIm]%s:%d -----\n",__func__, __LINE__);
 	return rc;
 }
 
@@ -315,7 +490,85 @@ static void msm_sensor_stop_stream(struct msm_sensor_ctrl_t *s_ctrl)
 	mutex_unlock(s_ctrl->msm_sensor_mutex);
 	return;
 }
+//fihtdc,derekcwwu add,start
+static void fih_msm_sensor_restart_stream(struct msm_sensor_ctrl_t *s_ctrl)
+{
+	int rc=0;
+	const char *sensor_name;
+	struct msm_camera_i2c_reg_setting conf_array;
+	struct msm_camera_i2c_reg_array *sensor_setting=NULL;
+	int size=0;
 
+	mutex_lock(s_ctrl->msm_sensor_mutex);
+	if (s_ctrl->sensor_state == MSM_SENSOR_POWER_UP)
+	{
+		sensor_name=s_ctrl->sensordata->sensor_name;
+		//misty add for E2MP main camera recover++
+		if(strncmp(sensor_name, "s5k4h7", strlen("s5k4h7"))==0)
+		{
+			sensor_setting = s5k4h7_recover;
+			size = sizeof(s5k4h7_recover)/sizeof(struct msm_camera_i2c_reg_array);
+		}
+		//misty add for E2MP main camera recover--
+		else if(strncmp(sensor_name, "s5k3p3_ple_truly", strlen("s5k3p3_ple_truly"))==0)
+		{
+			sensor_setting = s5k3p3_ple_recover;
+			size = sizeof(s5k3p3_ple_recover)/sizeof(struct msm_camera_i2c_reg_array);
+		}
+		else if(strncmp(sensor_name, "s5k4h8_kingcome", strlen("s5k4h8_kingcome"))==0)
+		{
+			sensor_setting = s5k4h8_ple_recover;
+			size = sizeof(s5k4h8_ple_recover)/sizeof(struct msm_camera_i2c_reg_array);
+		}
+		else if(strncmp(sensor_name, "s5k3p3", strlen("s5k3p3"))==0)
+		{
+			sensor_setting = s5k3p3_recover;
+			size = sizeof(s5k3p3_recover)/sizeof(struct msm_camera_i2c_reg_array);
+		}
+		else if(strncmp(sensor_name, "s5k4h8", strlen("s5k4h8"))==0)
+		{
+			sensor_setting = s5k4h8_recover;
+			size = sizeof(s5k4h8_recover)/sizeof(struct msm_camera_i2c_reg_array);
+		}
+		else
+			goto END;
+
+		pr_err("[MIMI@@]%s:%d sensor name:%s recover start\n",__func__,__LINE__,sensor_name);
+		//power down/power up
+		rc = s_ctrl->func_tbl->sensor_power_down(s_ctrl);
+		if (rc < 0) {
+			pr_err("[MIMI@@]%s:%d failed rc %d\n", __func__,__LINE__, rc);
+			goto END;
+		}
+		rc = s_ctrl->func_tbl->sensor_power_up(s_ctrl);
+		if (rc < 0) {
+			pr_err("[MIMI@@]%s:%d failed rc %d\n", __func__,__LINE__, rc);
+			goto END;
+		}
+
+		//new sensor setting
+		conf_array.addr_type = s_ctrl->stop_setting.addr_type;
+		conf_array.data_type = s_ctrl->stop_setting.data_type;
+		conf_array.delay = s_ctrl->stop_setting.delay;
+		conf_array.size = size;
+		conf_array.reg_setting = sensor_setting;
+        //misty add for E2MP s5k4h7 data type is BYTE ++
+		if(strncmp(sensor_name, "s5k4h7", strlen("s5k4h7"))==0){
+		    pr_err("[MIMI@@]%s:%d addr_type:%d, data_type:%d  @@\n",__func__,__LINE__,conf_array.addr_type, conf_array.data_type);
+            conf_array.addr_type = MSM_CAMERA_I2C_WORD_ADDR;
+		    conf_array.data_type = MSM_CAMERA_I2C_BYTE_DATA;
+		}
+        pr_err("[MIMI@@]%s:%d addr_type:%d, data_type:%d --\n",__func__,__LINE__,conf_array.addr_type, conf_array.data_type);
+		//misty add for E2MP s5k4h7 data type is BYTE ++
+		//reset sensor setting
+		s_ctrl->sensor_i2c_client->i2c_func_tbl->i2c_write_table(s_ctrl->sensor_i2c_client, &conf_array);
+		pr_err("[MIMI@@]%s:%d sensor recover done\n",__func__,__LINE__);
+	}
+END:
+	mutex_unlock(s_ctrl->msm_sensor_mutex);
+	return;
+}
+//fihtdc,derekcwwu add,end
 static int msm_sensor_get_af_status(struct msm_sensor_ctrl_t *s_ctrl,
 			void __user *argp)
 {
@@ -351,6 +604,7 @@ static long msm_sensor_subdev_ioctl(struct v4l2_subdev *sd,
 		msm_sensor_stop_stream(s_ctrl);
 		return 0;
 	case MSM_SD_NOTIFY_FREEZE:
+		fih_msm_sensor_restart_stream(s_ctrl);//fihtdc,derekcwwu add
 		return 0;
 	case MSM_SD_UNNOTIFY_FREEZE:
 		return 0;
@@ -770,10 +1024,30 @@ static int msm_sensor_config32(struct msm_sensor_ctrl_t *s_ctrl,
 			if (s_ctrl->sensordata->misc_regulator)
 				msm_sensor_misc_regulator(s_ctrl, 1);
 
+			//SW4-RL-Camera BBS log-00+{_20170216
+			sensorName = s_ctrl->sensordata->sensor_name;
+
+			if(s_ctrl->sensordata->actuator_name!=NULL && ((int)strlen(s_ctrl->sensordata->actuator_name)>1)){
+				actuatorName = s_ctrl->sensordata->actuator_name;
+				//pr_err("%s:%d actuatorName = %s\n", __func__, __LINE__, actuatorName);
+			}
+
+			pos = s_ctrl->sensordata->sensor_info->position;
+			//SW4-RL-Camera BBS log-00+}_20170216
+
+			//SW4-RL-Camera BBS log-00+_20170216
+			//fih_bbs_camera_msg_by_soensor_info(s_ctrl->sensor_i2c_client->cci_client->sid,
+			//    s_ctrl->sensordata->sensor_name, s_ctrl->sensordata->sensor_info->position, NULL, FIH_BBS_CAMERA_ERRORCODE_POWER_UP);
+
 			rc = s_ctrl->func_tbl->sensor_power_up(s_ctrl);
 			if (rc < 0) {
 				pr_err("%s:%d failed rc %d\n", __func__,
 					__LINE__, rc);
+				//FihtdcCode@Alan, add BBS log
+				//fih_bbs_camera_msg_by_addr(s_ctrl->sensor_i2c_client->cci_client->sid, FIH_BBS_CAMERA_ERRORCODE_POWER_UP);
+				//SW4-RL-Camera BBS log-00+_20170216
+				fih_bbs_camera_msg_by_soensor_info(s_ctrl->sensor_i2c_client->cci_client->sid,
+				    s_ctrl->sensordata->sensor_name, s_ctrl->sensordata->sensor_info->position, NULL, FIH_BBS_CAMERA_ERRORCODE_POWER_UP);
 				break;
 			}
 			s_ctrl->sensor_state = MSM_SENSOR_POWER_UP;
@@ -799,10 +1073,24 @@ static int msm_sensor_config32(struct msm_sensor_ctrl_t *s_ctrl,
 			if (s_ctrl->sensordata->misc_regulator)
 				msm_sensor_misc_regulator(s_ctrl, 0);
 
+			//SW4-RL-Camera BBS log-00+{_20170216
+			sensorName = s_ctrl->sensordata->sensor_name;
+			pos = s_ctrl->sensordata->sensor_info->position;
+			//SW4-RL-Camera BBS log-00+}_20170216
+
+			//SW4-RL-Camera BBS log-00+_20170216
+			//fih_bbs_camera_msg_by_soensor_info(s_ctrl->sensor_i2c_client->cci_client->sid,
+			//	 s_ctrl->sensordata->sensor_name, s_ctrl->sensordata->sensor_info->position, NULL, FIH_BBS_CAMERA_ERRORCODE_POWER_DW);
+
 			rc = s_ctrl->func_tbl->sensor_power_down(s_ctrl);
 			if (rc < 0) {
 				pr_err("%s:%d failed rc %d\n", __func__,
 					__LINE__, rc);
+				//FihtdcCode@Alan, add BBS log
+				//fih_bbs_camera_msg_by_addr(s_ctrl->sensor_i2c_client->cci_client->sid, FIH_BBS_CAMERA_ERRORCODE_POWER_DW);
+				//SW4-RL-Camera BBS log-00+_20170216
+				fih_bbs_camera_msg_by_soensor_info(s_ctrl->sensor_i2c_client->cci_client->sid,
+				  s_ctrl->sensordata->sensor_name, s_ctrl->sensordata->sensor_info->position, NULL, FIH_BBS_CAMERA_ERRORCODE_POWER_DW);
 				break;
 			}
 			s_ctrl->sensor_state = MSM_SENSOR_POWER_DOWN;
@@ -1256,10 +1544,30 @@ int msm_sensor_config(struct msm_sensor_ctrl_t *s_ctrl, void __user *argp)
 			if (s_ctrl->sensordata->misc_regulator)
 				msm_sensor_misc_regulator(s_ctrl, 1);
 
+			//SW4-RL-Camera BBS log-00+{_20170216
+			sensorName = s_ctrl->sensordata->sensor_name;
+
+			if(s_ctrl->sensordata->actuator_name!=NULL && ((int)strlen(s_ctrl->sensordata->actuator_name)>1)){
+				actuatorName = s_ctrl->sensordata->actuator_name;
+				//pr_err("%s:%d actuatorName = %s\n", __func__, __LINE__, actuatorName);
+			}
+
+			pos = s_ctrl->sensordata->sensor_info->position;
+			//SW4-RL-Camera BBS log-00+}_20170216
+
+			//SW4-RL-Camera BBS log-00+_20170216
+			//fih_bbs_camera_msg_by_soensor_info(s_ctrl->sensor_i2c_client->cci_client->sid,
+			//    s_ctrl->sensordata->sensor_name, s_ctrl->sensordata->sensor_info->position, NULL, FIH_BBS_CAMERA_ERRORCODE_POWER_UP);
+
 			rc = s_ctrl->func_tbl->sensor_power_up(s_ctrl);
 			if (rc < 0) {
 				pr_err("%s:%d failed rc %d\n", __func__,
 					__LINE__, rc);
+				//FihtdcCode@Alan, add BBS log
+				//fih_bbs_camera_msg_by_addr(s_ctrl->sensor_i2c_client->cci_client->sid, FIH_BBS_CAMERA_ERRORCODE_POWER_UP);
+				//SW4-RL-Camera BBS log-00+_20170216
+				fih_bbs_camera_msg_by_soensor_info(s_ctrl->sensor_i2c_client->cci_client->sid,
+				    s_ctrl->sensordata->sensor_name, s_ctrl->sensordata->sensor_info->position, NULL, FIH_BBS_CAMERA_ERRORCODE_POWER_UP);
 				break;
 			}
 			s_ctrl->sensor_state = MSM_SENSOR_POWER_UP;
@@ -1286,10 +1594,24 @@ int msm_sensor_config(struct msm_sensor_ctrl_t *s_ctrl, void __user *argp)
 			if (s_ctrl->sensordata->misc_regulator)
 				msm_sensor_misc_regulator(s_ctrl, 0);
 
+			//SW4-RL-Camera BBS log-00+{_20170216
+			sensorName = s_ctrl->sensordata->sensor_name;
+			pos = s_ctrl->sensordata->sensor_info->position;
+			//SW4-RL-Camera BBS log-00+}_20170216
+
+			//SW4-RL-Camera BBS log-00+_20170216
+			//fih_bbs_camera_msg_by_soensor_info(s_ctrl->sensor_i2c_client->cci_client->sid,
+			//	 s_ctrl->sensordata->sensor_name, s_ctrl->sensordata->sensor_info->position, NULL, FIH_BBS_CAMERA_ERRORCODE_POWER_DW);
+
 			rc = s_ctrl->func_tbl->sensor_power_down(s_ctrl);
 			if (rc < 0) {
 				pr_err("%s:%d failed rc %d\n", __func__,
 					__LINE__, rc);
+				//FihtdcCode@Alan, add BBS log
+				//fih_bbs_camera_msg_by_addr(s_ctrl->sensor_i2c_client->cci_client->sid, FIH_BBS_CAMERA_ERRORCODE_POWER_DW);
+				//SW4-RL-Camera BBS log-00+_20170216
+				fih_bbs_camera_msg_by_soensor_info(s_ctrl->sensor_i2c_client->cci_client->sid,
+				  s_ctrl->sensordata->sensor_name, s_ctrl->sensordata->sensor_info->position, NULL, FIH_BBS_CAMERA_ERRORCODE_POWER_DW);
 				break;
 			}
 			s_ctrl->sensor_state = MSM_SENSOR_POWER_DOWN;
