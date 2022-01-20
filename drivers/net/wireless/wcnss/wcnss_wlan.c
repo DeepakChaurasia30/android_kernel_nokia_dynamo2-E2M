@@ -251,6 +251,7 @@ static struct notifier_block wnb = {
 };
 
 #define NVBIN_FILE "wlan/prima/WCNSS_qcom_wlan_nv.bin"
+#define FIH_WLAN_NV   
 
 /* On SMD channel 4K of maximum data can be transferred, including message
  * header, so NV fragment size as next multiple of 1Kb is 3Kb.
@@ -1413,6 +1414,8 @@ wcnss_gpios_config(struct resource *gpios_5wire, bool enable)
 		if (enable) {
 			rc = gpio_request(i, gpios_5wire->name);
 			if (rc) {
+				pr_info("BBox; %s: WCNSS gpio_request %d err %d\n",__func__, i, rc);
+				printk("BBox::UEC;13::6\n");
 				pr_err("WCNSS gpio_request %d err %d\n", i, rc);
 				goto fail;
 			}
@@ -1481,6 +1484,8 @@ wcnss_ctrl_probe(struct platform_device *pdev)
 	ret = smd_named_open_on_edge(WCNSS_CTRL_CHANNEL, SMD_APPS_WCNSS,
 			&penv->smd_ch, penv, wcnss_smd_notify_event);
 	if (ret < 0) {
+		pr_info("BBox; %s: wcnss: cannot open the smd command channel %s: %d\n",__func__, WCNSS_CTRL_CHANNEL, ret);
+		printk("BBox::UEC;13::7\n");
 		pr_err("wcnss: cannot open the smd command channel %s: %d\n",
 				WCNSS_CTRL_CHANNEL, ret);
 		return -ENODEV;
@@ -2021,6 +2026,8 @@ static unsigned char wcnss_fw_status(void)
 
 	len = smd_read_avail(penv->smd_ch);
 	if (len < 1) {
+		pr_info("BBox; %s: invalid firmware status\n",__func__);
+		printk("BBox::UEC;13::8\n");
 		pr_err("%s: invalid firmware status", __func__);
 		return fw_status;
 	}
@@ -2041,6 +2048,8 @@ static void wcnss_send_cal_rsp(unsigned char fw_status)
 
 	msg = kmalloc((sizeof(struct smd_msg_hdr) + 1), GFP_KERNEL);
 	if (NULL == msg) {
+		pr_info("BBox; wcnss: %s: failed to get memory\n",__func__);
+		printk("BBox::UEC;13::9\n");
 		pr_err("wcnss: %s: failed to get memory\n", __func__);
 		return;
 	}
@@ -2264,6 +2273,7 @@ static void wcnss_process_smd_msg(int len)
 		pr_debug("wcnss: received WCNSS_CBC_COMPLETE_IND from FW\n");
 		break;
 	case WCNSS_CALDATA_UPLD_REQ:
+			pr_err("wcnss: received WCNSS_CALDATA_UPLD_REQ from FW\n");
 		extract_cal_data(len);
 		break;
 
@@ -2368,6 +2378,95 @@ static void wcnss_pm_qos_enable_pc(struct work_struct *worker)
 
 static DECLARE_RWSEM(wcnss_pm_sem);
 
+#ifdef FIH_WLAN_NV
+#define NV_TABLE_SIZE(_arr) (sizeof(_arr) / sizeof((_arr)[0]))
+#define FW_PATH                    "/vendor/firmware"
+#define FIH_NV_PACK_PATH           "wlan/prima"
+#define PROJ_ID_PATH               "/proc/devmodel"
+#define FILE_SIZE 60
+
+struct wlan_nv_tables {
+    const char *project_name;
+    const char *file_name;
+};
+
+const struct wlan_nv_tables g_fih_wlan_nv[] = {
+    {"PLE", "WCNSS_qcom_wlan_PLE_MP_nv.bin"},//ZZDC@PaulYang confirm with RF, only need to load the MP nv
+    {"ND1", "WCNSS_qcom_wlan_ND1_nv.bin"},
+    {"D1C", "WCNSS_qcom_wlan_D1C_nv.bin"},
+    {"VZ1", "WCNSS_qcom_wlan_VZ1_nv.bin"},
+    {"MA3", "WCNSS_qcom_wlan_MA3_nv.bin"},
+    {"MF3", "WCNSS_qcom_wlan_MF3_nv.bin"},
+    {"MS3", "WCNSS_qcom_wlan_MS3_nv.bin"},
+};
+
+int fih_nv_read(char *FIH_WLAN_NV_FILE , size_t size)
+{
+    char proj_id[5], file_path[size], check_path[size];
+    int  len, found, i;
+    struct file *file_filp = NULL;
+    mm_segment_t oldfs;
+
+    i = 0;
+    //Read devmodel
+    memset(file_path,'\0',size);
+    memset(check_path,'\0',size);
+    memset(proj_id,'\0',sizeof(proj_id));
+    file_filp = filp_open(PROJ_ID_PATH, O_RDONLY, 0);
+    if (IS_ERR(file_filp)) {
+        pr_err("wcnss: %s : Fail to open %s", __FUNCTION__,PROJ_ID_PATH);
+        return -1;
+    }
+    if (!file_filp->f_op || !file_filp->f_op->read) {
+        filp_close(file_filp, NULL);
+         pr_err("wcnss: %s : File (read) object is a null pointer!!!", __FUNCTION__);
+        return -1;
+    }
+
+    oldfs = get_fs();
+    set_fs(KERNEL_DS);
+    len = file_filp->f_op->read(file_filp, (unsigned char __user *)proj_id, sizeof(proj_id), &file_filp->f_pos);
+    set_fs(oldfs);
+    filp_close(file_filp, NULL);
+    proj_id[len-1]='\0'; // skip the \n
+    found = 0;
+    
+    
+    //Search NV table
+    pr_err("wcnss: /proc/devmodel: %s", proj_id);
+
+    for(i=0;i< NV_TABLE_SIZE(g_fih_wlan_nv); i++) {
+        if( strncmp( proj_id, g_fih_wlan_nv[i].project_name, strlen(proj_id)) == 0) {
+            snprintf(file_path, size,"%s/%s",FIH_NV_PACK_PATH,g_fih_wlan_nv[i].file_name);
+            pr_err("wcnss: Matching proj_id: %s, file_path=%s", proj_id, file_path);
+
+            //check file exist?
+            snprintf(check_path, size,"%s/%s",FW_PATH,file_path);
+            pr_err("wcnss:Real File Patch=%s",check_path);
+            file_filp = filp_open(check_path, O_RDONLY, 0);
+            if(IS_ERR(file_filp)){
+                //file isn't exsit
+                pr_err("wcnss: %s(%d) : Fail to open %s", __FUNCTION__, __LINE__,check_path);
+                return -1;
+            }else{
+                pr_err("wcnss: File exist on %s",check_path);
+                found = 1;
+            }
+        }
+    }
+    
+    //cahgne nv patch 
+    if(found ==0){
+       // no found 
+       pr_err("wcnss: No match proje_id(%s) found, use QC default path.",proj_id);
+       snprintf(file_path, size,"%s",NVBIN_FILE);      
+    }
+    strncpy(FIH_WLAN_NV_FILE, file_path, size);
+    return 1;
+}
+
+#endif
+
 static void wcnss_nvbin_dnld(void)
 {
 	int ret = 0;
@@ -2382,16 +2481,39 @@ static void wcnss_nvbin_dnld(void)
 	const struct firmware *nv = NULL;
 	struct device *dev = &penv->pdev->dev;
 
+#ifdef FIH_WLAN_NV 
+    unsigned char FIH_WLAN_NV_FILE[FILE_SIZE];
+    memset(FIH_WLAN_NV_FILE, '\0', sizeof(FIH_WLAN_NV_FILE));
+#endif
 	down_read(&wcnss_pm_sem);
+#ifdef FIH_WLAN_NV
+    if( fih_nv_read(FIH_WLAN_NV_FILE, sizeof(FIH_WLAN_NV_FILE)) < 0){
+        strncpy(FIH_WLAN_NV_FILE, NVBIN_FILE, sizeof(FIH_WLAN_NV_FILE));
+        pr_err("wcnss: fih_nv_read ret= -1, use QC default path, FIH_WLAN_NV_FILE=%s",FIH_WLAN_NV_FILE);
+    }else{
+        pr_err("wcnss: fih_nv_read ret= 1, use FIH NV FILE:%s \n",FIH_WLAN_NV_FILE);
+    }
+    ret = request_firmware(&nv, FIH_WLAN_NV_FILE, dev);
 
+	if (ret || !nv || !nv->data || !nv->size) {
+		pr_info("BBox; %s: request_firmware failed for %s\n",__func__, FIH_WLAN_NV_FILE);
+		printk("BBox::UEC;13::10\n");
+		pr_err("wcnss: %s: request_firmware failed for %s (ret = %d)\n",
+		       __func__, FIH_WLAN_NV_FILE, ret);
+		goto out;
+	}
+#else //QC default
+    pr_err("wcnss:%s default QC route, not fih route \n",__func__);
 	ret = request_firmware(&nv, NVBIN_FILE, dev);
 
 	if (ret || !nv || !nv->data || !nv->size) {
-		pr_err("wcnss: %s: request_firmware failed for %s (ret = %d)\n",
-			__func__, NVBIN_FILE, ret);
+		pr_info("BBox; %s: request_firmware failed for %s\n",__func__, NVBIN_FILE);
+		printk("BBox::UEC;13::10\n");
+		pr_err("wcnss:%s: request_firmware failed for %s (ret = %d)\n",
+		       __func__, NVBIN_FILE, ret);
 		goto out;
 	}
-
+#endif 
 	/* First 4 bytes in nv blob is validity bitmap.
 	 * We cannot validate nv, so skip those 4 bytes.
 	 */
@@ -2400,7 +2522,7 @@ static void wcnss_nvbin_dnld(void)
 
 	total_fragments = TOTALFRAGMENTS(nv_blob_size);
 
-	pr_info("wcnss: NV bin size: %d, total_fragments: %d\n",
+	pr_err("wcnss: NV bin size: %d, total_fragments: %d\n",
 		nv_blob_size, total_fragments);
 
 	/* get buffer for nv bin dnld req message */
@@ -2893,6 +3015,8 @@ wcnss_trigger_config(struct platform_device *pdev)
 		ret = wcnss_pronto_gpios_config(pdev, true);
 
 	if (ret) {
+		pr_info("BBox; %s: WCNSS gpios config failed. ret=%d\n",__func__, ret);
+		printk("BBox::UEC;13::11\n");
 		dev_err(&pdev->dev, "WCNSS gpios config failed.\n");
 		goto fail_gpio_res;
 	}
@@ -3475,7 +3599,11 @@ static int wcnss_notif_cb(struct notifier_block *this, unsigned long code,
 					WCNSS_WLAN_SWITCH_ON, &xo_mode);
 			wcnss_set_iris_xo_mode(xo_mode);
 			if (ret)
+			{
 				pr_err("Failed to execute wcnss_wlan_power\n");
+				printk("BBox::UEC;13::0\n");
+				pr_info("BBox; %s: WCNSS Power-up failed. ret=%d\n",__func__, ret);
+		    }
 		}
 	} else if (code == SUBSYS_PROXY_UNVOTE) {
 		if (pdev && pwlanconfig) {

@@ -28,6 +28,10 @@
 #include <asm/setup.h>  /* for COMMAND_LINE_SIZE */
 #include <asm/page.h>
 
+#ifdef CONFIG_FIH_PROJECT_E2M
+#include "../fih/fih_cpu.h"
+#endif
+
 /*
  * of_fdt_limit_memory - limit the number of regions in the /memory node
  * @limit: maximum entries
@@ -698,6 +702,10 @@ const void * __init of_flat_dt_match_machine(const void *default_match,
 	unsigned long dt_root;
 	unsigned int best_score = ~1, score = 0;
 
+	#ifdef CONFIG_FIH_PROJECT_E2M
+	const char *cpuinfo;
+	#endif
+
 	dt_root = of_get_flat_dt_root();
 	while ((data = get_next_compat(&compat))) {
 		score = of_flat_dt_match(dt_root, compat);
@@ -725,6 +733,11 @@ const void * __init of_flat_dt_match_machine(const void *default_match,
 	}
 
 	pr_info("Machine model: %s\n", of_flat_dt_get_machine_name());
+
+	#ifdef CONFIG_FIH_PROJECT_E2M
+	cpuinfo = of_flat_dt_get_machine_name();
+	fih_cpu_init_info(cpuinfo);
+	#endif
 
 	return best_data;
 }
