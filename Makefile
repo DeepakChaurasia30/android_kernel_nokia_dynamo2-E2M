@@ -788,6 +788,11 @@ ifeq ($(shell $(CONFIG_SHELL) $(srctree)/scripts/gcc-goto.sh $(CC)), y)
 	KBUILD_CFLAGS += -DCC_HAVE_ASM_GOTO
 endif
 
+# prj E2M
+ifeq ($(CONFIG_FIH_PROJECT_E2M),y)
+	KBUILD_CFLAGS += -Wformat=0
+endif
+
 include $(srctree)/scripts/Makefile.kasan
 include $(srctree)/scripts/Makefile.extrawarn
 include $(srctree)/scripts/Makefile.ubsan
