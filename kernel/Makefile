@@ -168,6 +168,10 @@ ifndef CONFIG_MODULE_SIG_HASH
 $(error Could not determine digest type to use from kernel config)
 endif
 
+# FIH, use fih module key {
+ifneq ($(CONFIG_MODULE_SIG_FIH),y)
+# FIH, use fih module key }
+
 signing_key.priv signing_key.x509: x509.genkey
 	@echo "###"
 	@echo "### Now generating an X.509 key pair to be used for signing modules."
@@ -204,4 +208,17 @@ x509.genkey:
 	@echo >>x509.genkey "keyUsage=digitalSignature"
 	@echo >>x509.genkey "subjectKeyIdentifier=hash"
 	@echo >>x509.genkey "authorityKeyIdentifier=keyid"
+
+# FIH, use fih module key {
+else
+
+signing_key.priv signing_key.x509 x509.genkey:
+	@echo "Use fih module sign key"
+	@pwd
+	@ls -l $(CONFIG_MODULE_SIG_FIH_KEY_PATH)/
+	@cp $(CONFIG_MODULE_SIG_FIH_KEY_PATH)/* ./
+
+endif
+# FIH, use fih module key }
+
 endif
