@@ -766,6 +766,11 @@ static int pil_parse_devicetree(struct pil_desc *desc)
 /* Synchronize request_firmware() with suspend */
 static DECLARE_RWSEM(pil_pm_rwsem);
 
+/*FihtdcCode@AlanHZChang, Add for one image */
+extern int fih_update_sku_to_cust(void);
+extern int fih_update_sim_to_cust(void);
+/*FihtdcCode@AlanHZChang, Add for one image */
+
 /**
  * pil_boot() - Load a peripheral image into memory and boot it
  * @desc: descriptor from pil_desc_init()
@@ -887,6 +892,15 @@ int pil_boot(struct pil_desc *desc)
 		}
 		hyp_assign = false;
 	}
+
+	/*FihtdcCode@AlanHZChang, Add for one image */
+	if(!(strncmp(desc->name, "modem", sizeof(char)*5))) {
+		ret = fih_update_sku_to_cust();
+		pr_info("fih_update_sku_to_cust = %d\n",ret);
+		ret = fih_update_sim_to_cust();
+		pr_info("fih_update_sim_to_cust = %d\n",ret);
+	}
+	/*FihtdcCode@AlanHZChang, Add for one image */
 
 	ret = desc->ops->auth_and_reset(desc);
 	if (ret) {
