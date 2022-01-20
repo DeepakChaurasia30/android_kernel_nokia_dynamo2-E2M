@@ -40,6 +40,7 @@
 #include <sound/audio_cal_utils.h>
 #include <sound/adsp_err.h>
 #include <sound/compress_params.h>
+#include <soc/qcom/subsystem_restart.h>
 
 #define TRUE        0x01
 #define FALSE       0x00
@@ -2967,6 +2968,8 @@ static int __q6asm_open_read_write(struct audio_client *ac, uint32_t rd_format,
 				   bool overwrite_topology, int topology)
 {
 	int rc = 0x00;
+	int ret = 0;
+
 	struct asm_stream_cmd_open_readwrite_v2 open;
 
 	if (ac == NULL) {
@@ -3110,6 +3113,12 @@ static int __q6asm_open_read_write(struct audio_client *ac, uint32_t rd_format,
 	if (!rc) {
 		pr_err("%s: timeout. waited for open read-write\n",
 				__func__);
+		pr_err("%s: timeout. subsystem restart adsp\n",
+				__func__);
+		ret = subsystem_restart("adsp");
+		if (ret == -ENODEV)
+			panic("adsp subsystem restart failed\n");
+
 		rc = -ETIMEDOUT;
 		goto fail_cmd;
 	}

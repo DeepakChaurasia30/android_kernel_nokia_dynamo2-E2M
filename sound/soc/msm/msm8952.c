@@ -14,6 +14,9 @@
 #include <linux/delay.h>
 #include <linux/gpio.h>
 #include <linux/of_gpio.h>
+#ifdef CONFIG_FIH_PROJECT_E2M
+#include <linux/gpio/consumer.h>
+#endif
 #include <linux/platform_device.h>
 #include <linux/io.h>
 #include <linux/module.h>
@@ -32,7 +35,13 @@
 #include "../codecs/msm8x16-wcd.h"
 #include "../codecs/wsa881x-analog.h"
 #include <linux/regulator/consumer.h>
+/*fihtdc 20160413, danielyj add for ExtSpkAmp flag*/
+#include <linux/proc_fs.h>
 #define DRV_NAME "msm8952-asoc-wcd"
+
+#ifdef CONFIG_FIH_PROJECT_E2M
+#define ENABLE_E2M_CUSTOMIZATION_AUDIO_DRIVER
+#endif
 
 #define BTSCO_RATE_8KHZ 8000
 #define BTSCO_RATE_16KHZ 16000
@@ -58,6 +67,18 @@ enum btsco_rates {
 	RATE_16KHZ_ID,
 };
 
+#ifndef CONFIG_FIH_PROJECT_E2M
+/*MM-ChrisYKLu-MS3BringUp-00+{ */
+static int vdd_spkr_gpio = -1;
+static int switch_en_gpio = -1;
+static int switch_in_gpio = -1;
+/*MM-ChrisYKLu-MS3BringUp-00+} */
+
+/*fihtdc 20160822, DanielYJ add for earprice switch*/
+static int ear_switch_en_gpio = -1;
+static int ear_switch_in_gpio = -1;
+#endif
+
 static int msm8952_auxpcm_rate = 8000;
 static int msm_btsco_rate = BTSCO_RATE_8KHZ;
 static int msm_btsco_ch = 1;
@@ -71,6 +92,14 @@ static int mi2s_rx_sample_rate = SAMPLING_RATE_48KHZ;
 static int mi2s_tx_bit_format = SNDRV_PCM_FORMAT_S16_LE;
 static int mi2s_tx_bits_per_sample = 16;
 static int mi2s_tx_sample_rate = SAMPLING_RATE_48KHZ;
+
+#ifndef CONFIG_FIH_PROJECT_E2M
+//static int quat_mi2s_rx_bit_format = SNDRV_PCM_FORMAT_S24_LE;
+/*fihtdc 20160413, danielyj add for ExtSpkAmp flag*/
+static int ext_spk_amp_support = 0;
+#endif
+/*fihtdc 20160902, danielyj add for quat channel*/
+static int msm_quat_mi2s_rx_ch = 1;
 
 static atomic_t quat_mi2s_clk_ref;
 static atomic_t quin_mi2s_clk_ref;
@@ -90,6 +119,8 @@ static int msm8952_wsa_switch_event(struct snd_soc_dapm_widget *w,
  * if R/L channel impedance is larger than 5K ohm
  */
 static struct wcd_mbhc_config mbhc_cfg = {
+//#ifdef CONFIG_FIH_PROJECT_E2M
+#if 0
 	.read_fw_bin = false,
 	.calibration = NULL,
 	.detect_extn_cable = true,
@@ -104,8 +135,29 @@ static struct wcd_mbhc_config mbhc_cfg = {
 	.key_code[5] = 0,
 	.key_code[6] = 0,
 	.key_code[7] = 0,
-	.linein_th = 5000,
+	.linein_th = 27000,
+#endif
+//#else
+	.read_fw_bin = false,
+	.calibration = NULL,
+	.detect_extn_cable = true,
+	.mono_stero_detection = false,
+	.swap_gnd_mic = NULL,
+	.hs_ext_micbias = false,
+	.key_code[0] = KEY_MEDIA,
+	.key_code[1] = KEY_VOLUMEUP,
+	.key_code[2] = KEY_VOLUMEDOWN,
+	.key_code[3] = 0,
+	.key_code[4] = 0,
+	.key_code[5] = 0,
+	.key_code[6] = 0,
+	.key_code[7] = 0,
+	.linein_th = 27000,
+//#endif
 };
+
+
+
 
 static struct afe_clk_cfg mi2s_rx_clk_v1 = {
 	AFE_API_VERSION_I2S_CONFIG,
@@ -175,6 +227,24 @@ static const char *const proxy_rx_ch_text[] = {"One", "Two", "Three", "Four",
 static const char *const vi_feed_ch_text[] = {"One", "Two"};
 static char const *mi2s_rx_sample_rate_text[] = {"KHZ_48",
 					"KHZ_96", "KHZ_192"};
+#ifndef CONFIG_FIH_PROJECT_E2M
+static const char *const spk_function[] = {"Off", "On"};/*MM-ChrisYKLu-MS3BringUp-00+ */
+static const char *const switch_en_function[] = {"Off", "On"};/*MM-ChrisYKLu-MS3BringUp-00+ */
+static const char *const switch_in_function[] = {"Off", "On"};/*MM-ChrisYKLu-MS3BringUp-00+ */
+
+/*fihtdc 20160822, DanielYJ add for earprice switch*/
+static const char *const ear_switch_en_function[] = {"Off", "On"};
+static const char *const ear_switch_in_function[] = {"Off", "On"};
+#endif
+//fih FTM headset and btn detect-S
+static const char *const audio_plug_type_text[] = {"TYPE_INVALID", "No_Device", "Headset", "Headphone",
+						"HIGH_HPH", "GND_MIC_SWAP", "ANC_HPH"};
+static const char *const audio_btn_state_text[] = {"0", "1"};
+
+static SOC_ENUM_SINGLE_EXT_DECL(audio_plug_type, audio_plug_type_text);
+static SOC_ENUM_SINGLE_EXT_DECL(audio_btn_state, audio_btn_state_text);
+//fih FTM headset and btn detect-E
+
 
 static inline int param_is_mask(int p)
 {
@@ -199,6 +269,45 @@ static void param_set_mask(struct snd_pcm_hw_params *p, int n, unsigned bit)
 		m->bits[bit >> 5] |= (1 << (bit & 31));
 	}
 }
+#ifndef CONFIG_FIH_PROJECT_E2M
+/*fihtdc 20160413, danielyj add for ExtSpkAmp flag*/
+static int fih_ext_spk_amp_read_proc(struct seq_file *m, void *v)
+{
+	if(ext_spk_amp_support)
+		seq_printf(m, "Support\n");
+	else
+		seq_printf(m, "Not Support\n");
+	return 0;
+}
+static int fih_ext_spk_amp_proc_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, fih_ext_spk_amp_read_proc, NULL);
+};
+
+static struct file_operations ext_spk_amp_proc_file_ops = {
+	.owner   = THIS_MODULE,
+	.open    = fih_ext_spk_amp_proc_open,
+	.read    = seq_read,
+	.llseek  = seq_lseek,
+	.release = single_release
+};
+static int fih_ext_spk_amp_init(struct platform_device *pdev)
+{
+	ext_spk_amp_support = of_property_read_bool(pdev->dev.of_node, "fih,ext-spk-amp-support");
+
+	if (proc_create("AllHWList/ExtSpkAmp", 0, NULL, &ext_spk_amp_proc_file_ops) == NULL)
+	{
+		proc_mkdir("AllHWList", NULL);
+		if (proc_create("AllHWList/ExtSpkAmp", 0, NULL, &ext_spk_amp_proc_file_ops) == NULL)
+		{
+			printk(KERN_ERR "fail to create proc/%s\n", "AllHWList/ExtSpkAmp");
+			return (1);
+		}
+	}
+
+	return 0;
+}
+#endif
 
 static const struct snd_soc_dapm_widget msm8952_dapm_widgets[] = {
 
@@ -260,6 +369,12 @@ int is_ext_spk_gpio_support(struct platform_device *pdev,
 				__func__, pdata->spk_ext_pa_gpio);
 			return -EINVAL;
 		}
+#ifndef CONFIG_FIH_PROJECT_E2M
+		/* MM-ChrisYKLu-popnoise-00+{ */
+		vdd_spkr_gpio=pdata->spk_ext_pa_gpio;
+		msm8x16_update_int_spk_boost(false);
+		/* MM-ChrisYKLu-popnoise-00+} */
+#endif
 	}
 	return 0;
 }
@@ -298,6 +413,168 @@ static int enable_spk_ext_pa(struct snd_soc_codec *codec, int enable)
 	}
 	return 0;
 }
+#ifndef CONFIG_FIH_PROJECT_E2M
+/* MM-ChrisYKLu-headphoneSwitch-00+{ */
+int is_headphone_switch_gpio_support(struct platform_device *pdev,
+			struct msm8916_asoc_mach_data *pdata)
+{
+	const char *hp_switch_en = "qcom,msm-hp-switch-en";
+	const char *hp_switch_in = "qcom,msm-hp-switch-in";
+
+	pr_err("%s:Enter\n", __func__);
+
+	pdata->hp_switch_en_gpio = of_get_named_gpio(pdev->dev.of_node,
+				hp_switch_en, 0);
+
+	if (pdata->hp_switch_en_gpio < 0) {
+		dev_dbg(&pdev->dev,
+			"%s: missing %s in dt node\n", __func__, hp_switch_en);
+	} else {
+		if (!gpio_is_valid(pdata->hp_switch_en_gpio)) {
+			pr_err("%s: Invalid switch-en gpio: %d",
+				__func__, pdata->hp_switch_en_gpio);
+			return -EINVAL;
+		}
+		switch_en_gpio = pdata->hp_switch_en_gpio;
+		gpio_direction_output(pdata->hp_switch_en_gpio, 0);
+	}
+
+	pdata->hp_switch_in_gpio = of_get_named_gpio(pdev->dev.of_node,
+				hp_switch_in, 0);
+
+	if (pdata->hp_switch_in_gpio < 0) {
+		dev_dbg(&pdev->dev,
+			"%s: missing %s in dt node\n", __func__, hp_switch_in);
+	} else {
+		if (!gpio_is_valid(pdata->hp_switch_in_gpio)) {
+			pr_err("%s: Invalid switch-in gpio: %d",
+				__func__, pdata->hp_switch_in_gpio);
+			return -EINVAL;
+		}
+		switch_in_gpio = pdata->hp_switch_in_gpio;
+		gpio_direction_output(pdata->hp_switch_in_gpio, 0);
+	}
+
+	return 0;
+}
+
+static int enable_headphone_switch(struct snd_soc_codec *codec, int enable)
+{
+	struct snd_soc_card *card = codec->component.card;
+	struct msm8916_asoc_mach_data *pdata = snd_soc_card_get_drvdata(card);
+	int ret;
+
+	if (!gpio_is_valid(pdata->hp_switch_en_gpio)) {
+		pr_err("%s: Invalid gpio: %d\n", __func__,
+			pdata->hp_switch_en_gpio);
+		return false;
+	}
+
+	pr_err("%s: %s headphone_switch\n", __func__,
+		enable ? "Enable" : "Disable");
+
+	if (enable) {
+		ret = msm_gpioset_activate(CLIENT_WCD_INT, "hp_switch_gpio");
+		if (ret) {
+			pr_err("%s: gpio set cannot be activated %s\n",
+					__func__, "hp_switch_gpio");
+			return ret;
+		}
+		gpio_set_value_cansleep(pdata->hp_switch_en_gpio, enable);
+		gpio_set_value_cansleep(pdata->hp_switch_in_gpio, enable);
+	} else {
+		gpio_set_value_cansleep(pdata->hp_switch_in_gpio, enable);
+		gpio_set_value_cansleep(pdata->hp_switch_en_gpio, enable);
+		ret = msm_gpioset_suspend(CLIENT_WCD_INT, "hp_switch_gpio");
+		if (ret) {
+			pr_err("%s: gpio set cannot be de-activated %s\n",
+					__func__, "hp_switch_gpio");
+			return ret;
+		}
+	}
+	return 0;
+}
+/* MM-ChrisYKLu-headphoneSwitch-00+} */
+
+/*fihtdc 20160822, DanielYJ add for earprice switch*/
+int is_ear_switch_gpio_support(struct platform_device *pdev,
+			struct msm8916_asoc_mach_data *pdata)
+{
+	const char *ear_switch_en = "qcom,msm-ear-switch-en";
+	const char *ear_switch_in = "qcom,msm-ear-switch-in";
+
+	pr_err("%s:Enter\n", __func__);
+
+	pdata->ear_switch_en_gpio = of_get_named_gpio(pdev->dev.of_node,
+				ear_switch_en, 0);
+
+	if (pdata->ear_switch_en_gpio < 0) {
+		dev_dbg(&pdev->dev,
+			"%s: missing %s in dt node\n", __func__, ear_switch_en);
+	} else {
+		if (!gpio_is_valid(pdata->ear_switch_en_gpio)) {
+			pr_err("%s: Invalid ear switch-en gpio: %d",
+				__func__, pdata->ear_switch_en_gpio);
+			return -EINVAL;
+		}
+		ear_switch_en_gpio = pdata->ear_switch_en_gpio;
+	}
+
+	pdata->ear_switch_in_gpio = of_get_named_gpio(pdev->dev.of_node,
+				ear_switch_in, 0);
+
+	if (pdata->ear_switch_in_gpio < 0) {
+		dev_dbg(&pdev->dev,
+			"%s: missing %s in dt node\n", __func__, ear_switch_in);
+	} else {
+		if (!gpio_is_valid(pdata->ear_switch_in_gpio)) {
+			pr_err("%s: Invalid ear switch-in gpio: %d",
+				__func__, pdata->ear_switch_in_gpio);
+			return -EINVAL;
+		}
+		ear_switch_in_gpio = pdata->ear_switch_in_gpio;
+	}
+
+	return 0;
+}
+
+static int enable_ear_switch(struct snd_soc_codec *codec, int enable)
+{
+	struct snd_soc_card *card = codec->component.card;
+	struct msm8916_asoc_mach_data *pdata = snd_soc_card_get_drvdata(card);
+	int ret;
+
+	if (!gpio_is_valid(pdata->ear_switch_en_gpio)) {
+		pr_err("%s: Invalid gpio: %d\n", __func__,
+			pdata->ear_switch_en_gpio);
+		return false;
+	}
+
+	pr_err("%s: %s earprice\n", __func__,
+		enable ? "Enable" : "Disable");
+
+	if (enable) {
+		ret = msm_gpioset_activate(CLIENT_WCD_INT, "ear_switch");
+		if (ret) {
+			pr_err("%s: gpio set cannot be activated %s\n",
+					__func__, "ear_switch");
+			return ret;
+		}
+		gpio_set_value_cansleep(pdata->ear_switch_en_gpio, enable);
+		gpio_set_value_cansleep(pdata->ear_switch_in_gpio, enable);
+	} else {
+		gpio_set_value_cansleep(pdata->ear_switch_in_gpio, enable);
+		gpio_set_value_cansleep(pdata->ear_switch_en_gpio, enable);
+		ret = msm_gpioset_suspend(CLIENT_WCD_INT, "ear_switch");
+		if (ret) {
+			pr_err("%s: gpio set cannot be de-activated %s\n",
+					__func__, "ear_switch");
+			return ret;
+		}
+	}
+	return 0;
+}
+#endif
 
 /* Validate whether US EU switch is present or not */
 int is_us_eu_switch_gpio_support(struct platform_device *pdev,
@@ -332,6 +609,163 @@ int is_us_eu_switch_gpio_support(struct platform_device *pdev,
 	}
 	return 0;
 }
+#ifndef CONFIG_FIH_PROJECT_E2M
+/*MM-ChrisYKLu-MS3BringUp-00+{ */
+static int msm8952_ti_get_spk(struct snd_kcontrol *kcontrol,
+		       struct snd_ctl_elem_value *ucontrol)
+{
+	pr_debug("%s vdd_spkr_gpio %d\n", __func__,vdd_spkr_gpio);
+
+	if (gpio_is_valid(vdd_spkr_gpio))
+	{
+		pr_debug("%s vdd_spkr_gpio %d=%d\n", __func__,vdd_spkr_gpio, gpio_get_value(vdd_spkr_gpio));
+		ucontrol->value.integer.value[0] = gpio_get_value(vdd_spkr_gpio);
+	}
+	return 0;
+}
+
+static int msm8952_ti_set_spk(struct snd_kcontrol *kcontrol,
+		       struct snd_ctl_elem_value *ucontrol)
+{
+	pr_err("%s vdd_spkr_gpio %d\n", __func__,vdd_spkr_gpio);
+
+	if (ucontrol->value.integer.value[0] > 0) {
+		if (gpio_is_valid(vdd_spkr_gpio)) {
+			gpio_direction_output(vdd_spkr_gpio, 1);
+			pr_err( "%s: Enabled speaker\n", __func__);
+		}
+	} else {
+		if (gpio_is_valid(vdd_spkr_gpio)) {
+			gpio_direction_output(vdd_spkr_gpio, 0);
+			pr_err("%s: Disabled speaker\n", __func__);
+		}
+	}
+	return 1;
+}
+
+static int msm8952_get_sw_en(struct snd_kcontrol *kcontrol,
+		       struct snd_ctl_elem_value *ucontrol)
+{
+	if (gpio_is_valid(switch_en_gpio))
+	{
+		pr_debug("%s switch_en_gpio %d=%d\n", __func__, switch_en_gpio, gpio_get_value(switch_en_gpio));
+		ucontrol->value.integer.value[0] = gpio_get_value(switch_en_gpio);
+	}
+	return 0;
+}
+
+static int msm8952_set_sw_en(struct snd_kcontrol *kcontrol,
+		       struct snd_ctl_elem_value *ucontrol)
+{
+	pr_err("%s switch_en_gpio %d\n", __func__,switch_en_gpio);
+
+	if (ucontrol->value.integer.value[0] > 0) {
+		if (gpio_is_valid(switch_en_gpio)) {
+			gpio_direction_output(switch_en_gpio, 1);
+			pr_err( "%s: Enabled switch en\n",__func__);
+		}
+	} else {
+		if (gpio_is_valid(switch_en_gpio)) {
+			gpio_direction_output(switch_en_gpio, 0);
+			pr_err("%s: Disabled switch en\n", __func__);
+		}
+	}
+	return 1;
+}
+
+static int msm8952_get_sw_in(struct snd_kcontrol *kcontrol,
+		       struct snd_ctl_elem_value *ucontrol)
+{
+	if (gpio_is_valid(switch_in_gpio))
+	{
+		pr_debug("%s switch_in_gpio %d=%d\n", __func__, switch_in_gpio, gpio_get_value(switch_in_gpio));
+		ucontrol->value.integer.value[0] = gpio_get_value(switch_in_gpio);
+	}
+	return 0;
+}
+
+static int msm8952_set_sw_in(struct snd_kcontrol *kcontrol,
+		       struct snd_ctl_elem_value *ucontrol)
+{
+	pr_err("%s switch_in_gpio %d\n", __func__, switch_in_gpio);
+
+	if (ucontrol->value.integer.value[0] > 0) {
+		if (gpio_is_valid(switch_in_gpio)) {
+			gpio_direction_output(switch_in_gpio, 1);
+			pr_err( "%s: Enabled switch in\n",__func__);
+		}
+	} else {
+		if (gpio_is_valid(switch_in_gpio)) {
+			gpio_direction_output(switch_in_gpio, 0);
+			pr_err("%s: Disabled switch in\n",__func__);
+		}
+	}
+	return 1;
+}
+
+/*MM-ChrisYKLu-MS3BringUp-00+} */
+
+/*fihtdc 20160822, DanielYJ add for earprice switch*/
+static int msm8952_get_ear_sw_en(struct snd_kcontrol *kcontrol,
+		       struct snd_ctl_elem_value *ucontrol)
+{
+	if (gpio_is_valid(ear_switch_en_gpio))
+	{
+		pr_err("%s ear_switch_en_gpio %d=%d\n", __func__, ear_switch_en_gpio, gpio_get_value(ear_switch_en_gpio));
+		ucontrol->value.integer.value[0] = gpio_get_value(ear_switch_en_gpio);
+	}
+	return 0;
+}
+
+static int msm8952_set_ear_sw_en(struct snd_kcontrol *kcontrol,
+		       struct snd_ctl_elem_value *ucontrol)
+{
+	pr_err("%s ear_switch_en_gpio %d\n", __func__,ear_switch_en_gpio);
+
+	if (ucontrol->value.integer.value[0] > 0) {
+		if (gpio_is_valid(ear_switch_en_gpio)) {
+			gpio_direction_output(ear_switch_en_gpio, 1);
+			pr_err( "%s: Enabled ear_switch en\n",__func__);
+		}
+	} else {
+		if (gpio_is_valid(ear_switch_en_gpio)) {
+			gpio_direction_output(ear_switch_en_gpio, 0);
+			pr_err("%s: Disabled ear_switch en\n", __func__);
+		}
+	}
+	return 1;
+}
+
+static int msm8952_get_ear_sw_in(struct snd_kcontrol *kcontrol,
+		       struct snd_ctl_elem_value *ucontrol)
+{
+	if (gpio_is_valid(ear_switch_in_gpio))
+	{
+		pr_err("%s ear_switch_in_gpio %d=%d\n", __func__, ear_switch_in_gpio, gpio_get_value(ear_switch_in_gpio));
+		ucontrol->value.integer.value[0] = gpio_get_value(ear_switch_in_gpio);
+	}
+	return 0;
+}
+
+static int msm8952_set_ear_sw_in(struct snd_kcontrol *kcontrol,
+		       struct snd_ctl_elem_value *ucontrol)
+{
+	pr_err("%s ear_switch_in_gpio %d\n", __func__, ear_switch_in_gpio);
+
+	if (ucontrol->value.integer.value[0] > 0) {
+		if (gpio_is_valid(ear_switch_in_gpio)) {
+			gpio_direction_output(ear_switch_in_gpio, 1);
+			pr_err( "%s: Enabled ear_switch in\n",__func__);
+		}
+	} else {
+		if (gpio_is_valid(ear_switch_in_gpio)) {
+			gpio_direction_output(ear_switch_in_gpio, 0);
+			pr_err("%s: Disabled ear_switch in\n",__func__);
+		}
+	}
+	return 1;
+}
+#endif
 
 static int msm_proxy_rx_ch_get(struct snd_kcontrol *kcontrol,
 				struct snd_ctl_elem_value *ucontrol)
@@ -427,6 +861,39 @@ static int msm_be_hw_params_fixup(struct snd_soc_pcm_runtime *rtd,
 	pr_debug("%s()\n", __func__);
 	rate->min = rate->max = 48000;
 	channels->min = channels->max = 2;
+
+	return 0;
+}
+
+/*fihtdc 20160902, danielyj add for quat channel*/
+static int msm_quat_be_hw_params_fixup(struct snd_soc_pcm_runtime *rtd,
+				struct snd_pcm_hw_params *params)
+{
+	struct snd_interval *rate = hw_param_interval(params,
+					SNDRV_PCM_HW_PARAM_RATE);
+
+	struct snd_interval *channels = hw_param_interval(params,
+					SNDRV_PCM_HW_PARAM_CHANNELS);
+
+	pr_debug("%s(), channel:%d\n", __func__, msm_quat_mi2s_rx_ch);
+	rate->min = rate->max = 48000;
+	channels->min = channels->max = msm_quat_mi2s_rx_ch;
+
+	return 0;
+}
+
+static int msm_quat_tx_be_hw_params_fixup(struct snd_soc_pcm_runtime *rtd,
+				struct snd_pcm_hw_params *params)
+{
+	struct snd_interval *rate = hw_param_interval(params,
+					SNDRV_PCM_HW_PARAM_RATE);
+
+	struct snd_interval *channels = hw_param_interval(params,
+					SNDRV_PCM_HW_PARAM_CHANNELS);
+
+	pr_debug("%s(), channel:%d\n", __func__, 1);
+	rate->min = rate->max = 48000;
+	channels->min = channels->max = 1;
 
 	return 0;
 }
@@ -586,6 +1053,7 @@ static int msm_mi2s_sclk_ctl(struct snd_pcm_substream *substream, bool enable)
 	if (enable) {
 		if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK) {
 			if (pdata->afe_clk_ver == AFE_CLK_VERSION_V1) {
+				mi2s_rx_clk_v1.clk_val2 = Q6AFE_LPASS_OSR_CLK_12_P288_MHZ;
 				mi2s_rx_clk_v1.clk_val1 =
 						get_mi2s_clk_val(port_id);
 				ret = afe_set_lpass_clock(port_id,
@@ -601,6 +1069,7 @@ static int msm_mi2s_sclk_ctl(struct snd_pcm_substream *substream, bool enable)
 			}
 		} else if (substream->stream == SNDRV_PCM_STREAM_CAPTURE) {
 			if (pdata->afe_clk_ver == AFE_CLK_VERSION_V1) {
+				mi2s_tx_clk_v1.clk_val2 = Q6AFE_LPASS_OSR_CLK_12_P288_MHZ;
 				mi2s_tx_clk_v1.clk_val1 =
 						get_mi2s_clk_val(port_id);
 				ret = afe_set_lpass_clock(port_id,
@@ -623,6 +1092,7 @@ static int msm_mi2s_sclk_ctl(struct snd_pcm_substream *substream, bool enable)
 	} else {
 		if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK) {
 			if (pdata->afe_clk_ver == AFE_CLK_VERSION_V1) {
+				mi2s_rx_clk_v1.clk_val2 = Q6AFE_LPASS_OSR_CLK_DISABLE;
 				mi2s_rx_clk_v1.clk_val1 =
 						Q6AFE_LPASS_IBIT_CLK_DISABLE;
 				ret = afe_set_lpass_clock(port_id,
@@ -636,6 +1106,7 @@ static int msm_mi2s_sclk_ctl(struct snd_pcm_substream *substream, bool enable)
 			}
 		} else if (substream->stream == SNDRV_PCM_STREAM_CAPTURE) {
 			if (pdata->afe_clk_ver == AFE_CLK_VERSION_V1) {
+				mi2s_tx_clk_v1.clk_val2 = Q6AFE_LPASS_OSR_CLK_DISABLE;
 				mi2s_tx_clk_v1.clk_val1 =
 						Q6AFE_LPASS_IBIT_CLK_DISABLE;
 				ret = afe_set_lpass_clock(port_id,
@@ -1029,6 +1500,460 @@ static int msm_ter_mi2s_tx_ch_put(struct snd_kcontrol *kcontrol,
 	return 1;
 }
 
+static int msm_quat_mi2s_rx_ch_get(struct snd_kcontrol *kcontrol,
+	struct snd_ctl_elem_value *ucontrol)
+{
+	pr_debug("%s: msm_quat_mi2s_rx_ch  = %d\n", __func__,
+		 msm_quat_mi2s_rx_ch);
+	ucontrol->value.integer.value[0] = msm_quat_mi2s_rx_ch - 1;
+	return 0;
+}
+
+static int msm_quat_mi2s_rx_ch_put(struct snd_kcontrol *kcontrol,
+	struct snd_ctl_elem_value *ucontrol)
+{
+	msm_quat_mi2s_rx_ch = ucontrol->value.integer.value[0] + 1;
+
+	pr_debug("%s: msm_quat_mi2s_rx_ch = %d\n", __func__, msm_quat_mi2s_rx_ch);
+	return 1;
+}
+
+#ifdef ENABLE_E2M_CUSTOMIZATION_AUDIO_DRIVER
+// Add start E2M DAPM driver qiujie 2018.0320
+/* Define some macros that will be used */
+#ifndef SOC_ENUM_SINGLE_AUTODISABLE
+#define SOC_ENUM_SINGLE_AUTODISABLE(xreg, xshift, xitems, xtexts) \
+{	.reg = xreg, .shift_l = xshift, .shift_r = xshift, \
+	.items = xitems, .texts = xtexts, \
+	.mask = xitems ? roundup_pow_of_two(xitems) - 1 : 0, \
+	.autodisable = 1}
+#endif
+
+#ifndef SOC_VALUE_ENUM_SINGLE_AUTODISABLE
+#define SOC_VALUE_ENUM_SINGLE_AUTODISABLE(xreg, xshift, xitems, xtexts, xvalues) \
+{	.reg = xreg, .shift_l = xshift, .shift_r = xshift, \
+	.items = xitems, .texts = xtexts, \
+	.mask = xitems ? roundup_pow_of_two(xitems) - 1 : 0, \
+	.values = xvalues, .autodisable = 1}
+#endif
+
+#ifndef SOC_ENUM_SINGLE_VIRT
+#define SOC_ENUM_SINGLE_VIRT(xitems, xtexts) \
+		SOC_ENUM_SINGLE(SND_SOC_NOPM, 0, xitems, xtexts)
+#endif
+
+#ifndef SOC_ENUM_SINGLE_AUTODISABLE_VIRT
+#define SOC_ENUM_SINGLE_AUTODISABLE_VIRT(xitems, xtexts) \
+		SOC_ENUM_SINGLE_AUTODISABLE(SND_SOC_NOPM, 0, xitems, xtexts)
+#endif
+
+#ifndef SOC_VALUE_ENUM_SINGLE_AUTODISABLE_VIRT
+#define SOC_VALUE_ENUM_SINGLE_AUTODISABLE_VIRT(xitems, xtexts, xvalues) \
+		SOC_VALUE_ENUM_SINGLE_AUTODISABLE(SND_SOC_NOPM, 0, \
+				xitems, xtexts, xvalues)
+#endif
+
+#ifndef UNUSED
+#define UNUSED(a) \
+	(a) = (a)
+#endif
+
+#ifndef SND_SOC_DAPM_VIRT_DEMUX
+#define SND_SOC_DAPM_VIRT_DEMUX(wname, wcontrols) \
+		SND_SOC_DAPM_DEMUX(wname, SND_SOC_NOPM, 0, 0, wcontrols)
+#endif
+
+/* After DVT build, remove HAC control in driver. */
+//#define ENABLE_FEATURE_HAC
+
+// PA AW87318 mode
+enum AW87318_MODE{
+	AW87318_OFF = 0,
+	AW87318_MODE_1,
+	AW87318_MODE_2,
+	AW87318_MODE_3,
+	AW87318_MODE_4,
+	AW87318_MODE_5,
+	AW87318_MODE_6,
+	AW87318_MODE_7,
+	AW87318_MODE_RECEIVER_1,
+	AW87318_MODE_RECEIVER_2,
+	AW87318_MODE_10,
+	AW87318_MODE_NUM,
+};
+
+// E2M audio-related special gpios index of e2m_gpios
+enum {
+#ifdef ENABLE_FEATURE_HAC
+	E2M_HAC_PA_EN_GPIO = 0,
+	E2M_SPKR_PA_SHDN_GPIO,
+#else
+	E2M_SPKR_PA_SHDN_GPIO = 0,
+#endif
+	E2M_SPKL_PA_SHDN_GPIO,
+	E2M_HEADPHONE_SWITCH_EN_GPIO,
+	E2M_AUDIO_SPEC_GPIO_NUM,
+};
+
+// E2M audio-related special gpios collection
+static struct gpio_desc* e2m_audio_spec_gpios[E2M_AUDIO_SPEC_GPIO_NUM] = {0};
+// E2M spec kcontrol current values collection
+static int e2m_spec_kcontrol_current_values[E2M_AUDIO_SPEC_GPIO_NUM] = {
+	[E2M_HEADPHONE_SWITCH_EN_GPIO] = 1,
+};
+// E2M spec kcontrol buffer values collection
+static int e2m_spec_kcontrol_buffer_values[E2M_AUDIO_SPEC_GPIO_NUM];
+
+// DISABLE/ENABLE texts
+static const char *on_off_texts[] = {
+	"DISABLE", "ENABLE",
+};
+
+// AW87318 PA mode texts
+static const char *spk_pa_mode_texts[] = {
+	"OFF",				// AW87318_OFF
+	"MODE_1",			// AW87318_MODE_1
+	"MODE_2",			// AW87318_MODE_2
+	"MODE_3",			// AW87318_MODE_3
+	"MODE_4",			// AW87318_MODE_4
+	"MODE_5",			// AW87318_MODE_5
+	"MODE_6",			// AW87318_MODE_6
+	"MODE_7",			// AW87318_MODE_7
+	"MODE_RECEIVER_1",	// AW87318_MODE_RECEIVER_1
+	"MODE_RECEIVER_2",	// AW87318_MODE_RECEIVER_2
+	"MODE_10",			// AW87318_MODE_10
+};
+
+// AW87318 PA mode values
+static const unsigned int spk_pa_mode_values[] = {
+	AW87318_OFF,
+	AW87318_MODE_1,
+	AW87318_MODE_2,
+	AW87318_MODE_3,
+	AW87318_MODE_4,
+	AW87318_MODE_5,
+	AW87318_MODE_6,
+	AW87318_MODE_7,
+	AW87318_MODE_RECEIVER_1,
+	AW87318_MODE_RECEIVER_2,
+	AW87318_MODE_10,
+};
+
+#ifdef ENABLE_FEATURE_HAC
+static int hac_pa_value_put(struct snd_kcontrol *kcontrol,
+		struct snd_ctl_elem_value *ucontrol)
+{
+	struct soc_enum *e = (struct soc_enum *)kcontrol->private_value;
+
+	// Cached value
+	e2m_spec_kcontrol_buffer_values[E2M_HAC_PA_EN_GPIO] =
+		snd_soc_enum_item_to_val(e,
+				ucontrol->value.enumerated.item[0]);
+
+	return snd_soc_dapm_put_enum_double(kcontrol, ucontrol);
+}
+#endif
+
+static int spkr_pa_value_put(struct snd_kcontrol *kcontrol,
+		struct snd_ctl_elem_value *ucontrol)
+{
+	struct soc_enum *e = (struct soc_enum *)kcontrol->private_value;
+
+	// Cached value
+	e2m_spec_kcontrol_buffer_values[E2M_SPKR_PA_SHDN_GPIO] =
+		snd_soc_enum_item_to_val(e,
+				ucontrol->value.enumerated.item[0]);
+
+	return snd_soc_dapm_put_enum_double(kcontrol, ucontrol);
+}
+
+static int spkl_pa_value_put(struct snd_kcontrol *kcontrol,
+		struct snd_ctl_elem_value *ucontrol)
+{
+	struct soc_enum *e = (struct soc_enum *)kcontrol->private_value;
+
+	// Cached value
+	e2m_spec_kcontrol_buffer_values[E2M_SPKL_PA_SHDN_GPIO] =
+		snd_soc_enum_item_to_val(e,
+				ucontrol->value.enumerated.item[0]);
+
+	return snd_soc_dapm_put_enum_double(kcontrol, ucontrol);
+}
+
+static int hp_switch_status_get(struct snd_kcontrol *kcontrol,
+		struct snd_ctl_elem_value *ucontrol)
+{
+	struct soc_enum *e = (struct soc_enum *)kcontrol->private_value;
+	unsigned int item;
+	int value;
+
+	value = e2m_spec_kcontrol_current_values[E2M_HEADPHONE_SWITCH_EN_GPIO];
+	item = snd_soc_enum_val_to_item(e, value);
+	ucontrol->value.enumerated.item[0] = item;
+	return 0;
+}
+
+static int hp_switch_status_put(struct snd_kcontrol *kcontrol,
+		struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_dapm_context *dapm = snd_soc_dapm_kcontrol_dapm(kcontrol);
+	struct snd_soc_card *card = dapm->card;
+	struct soc_enum *e = (struct soc_enum *)kcontrol->private_value;
+	unsigned int *item = ucontrol->value.enumerated.item;
+	int value, change;
+	struct gpio_desc *gpio = e2m_audio_spec_gpios[E2M_HEADPHONE_SWITCH_EN_GPIO];
+	int ret = 0;
+
+	if (item[0] >= e->items)
+		return -EINVAL;
+
+	value = snd_soc_enum_item_to_val(e, item[0]);
+	dev_dbg(card->dev, "%s gpio %d value %d.\n", __func__, desc_to_gpio(gpio), value);
+
+	change = (e2m_spec_kcontrol_current_values[E2M_HEADPHONE_SWITCH_EN_GPIO] != value);
+	if (change) {
+		snd_soc_dapm_mux_update_power(dapm, kcontrol, item[0], e, NULL);
+		gpiod_set_value(gpio, value);
+		e2m_spec_kcontrol_current_values[E2M_HEADPHONE_SWITCH_EN_GPIO] = value;
+	}
+
+	if (ret) {
+		dev_err(card->dev, "%s gpio %d control err, ret %d\n", __func__, desc_to_gpio(gpio), ret);
+	}
+
+	return change;
+}
+
+// Commonly used control event function
+static int dapm_single_gpio_event(struct snd_soc_dapm_widget *w,
+		struct snd_kcontrol *kcontrol,
+		int gpio_index, int event,
+		int (*gpiod_control)(struct gpio_desc*, int))
+{
+	struct snd_soc_dapm_context *dapm = w->dapm;
+	struct snd_soc_card *card = dapm->card;
+	struct gpio_desc* gpio = e2m_audio_spec_gpios[gpio_index];
+	int value_buffer = e2m_spec_kcontrol_buffer_values[gpio_index];
+	int change;
+
+	UNUSED(kcontrol);
+
+	change = (value_buffer !=
+			e2m_spec_kcontrol_current_values[gpio_index]);
+
+	dev_dbg(card->dev, "%s gpio %d value_buffer %d value_current %d\n",
+		   __func__, desc_to_gpio(gpio), value_buffer,
+		   e2m_spec_kcontrol_current_values[gpio_index]);
+
+	switch (event) {
+	case SND_SOC_DAPM_POST_PMU:
+		if (change) {
+			dev_dbg(card->dev, "%s event %d old_value %d new_value %d\n", __func__,
+					event, e2m_spec_kcontrol_current_values[gpio_index], value_buffer);
+			gpiod_control(gpio, value_buffer);
+			e2m_spec_kcontrol_current_values[gpio_index] = value_buffer;
+		}
+		break;
+	case SND_SOC_DAPM_PRE_PMD:
+		if (e2m_spec_kcontrol_current_values[gpio_index]) {
+			dev_dbg(card->dev, "%s event %d old_value %d new_value 0\n", __func__,
+					event, e2m_spec_kcontrol_current_values[gpio_index]);
+			gpiod_control(gpio, 0);
+			e2m_spec_kcontrol_current_values[gpio_index] = 0;
+		}
+		break;
+	}
+
+	return 0;
+}
+
+#ifdef ENABLE_FEATURE_HAC
+// Used to match dapm_single_gpio_event function parameter
+static int simple_gpiod_set_value(struct gpio_desc *gpio, int value) {
+	gpiod_set_value(gpio, value);
+	return 0;
+}
+#endif
+
+static int aw87318_mode_set(struct gpio_desc *gpio, int mode)
+{
+	int i;
+
+	if (mode >= AW87318_MODE_NUM || mode < 0) {
+		dev_dbg(gpiod_to_chip(gpio)->dev, "%s aw87318 does not support mode %u.\n", __func__, mode);
+		return -1;
+	}
+	dev_dbg(gpiod_to_chip(gpio)->dev, "%s gpio %d mode %u.\n", __func__, desc_to_gpio(gpio), mode);
+	// shut down PA and delay 1ms
+	gpiod_set_value(gpio, 0);
+	mdelay(1);
+	for (i = 0; i < mode; i++) {
+		gpiod_set_value(gpio, 0);
+		udelay(2);
+		gpiod_set_value(gpio, 1);
+		udelay(2);
+	}
+	return 0;
+}
+
+#ifdef ENABLE_FEATURE_HAC
+static int hac_pa_event(struct snd_soc_dapm_widget *w,
+		struct snd_kcontrol *kcontrol, int event)
+{
+	return dapm_single_gpio_event(w, kcontrol, E2M_HAC_PA_EN_GPIO, event,
+			simple_gpiod_set_value);
+}
+#endif
+
+static int spkr_pa_event(struct snd_soc_dapm_widget *w,
+		struct snd_kcontrol *kcontrol, int event)
+{
+	return dapm_single_gpio_event(w, kcontrol, E2M_SPKR_PA_SHDN_GPIO, event,
+			aw87318_mode_set);
+}
+
+static int spkl_pa_event(struct snd_soc_dapm_widget *w,
+		struct snd_kcontrol *kcontrol, int event)
+{
+	return dapm_single_gpio_event(w, kcontrol, E2M_SPKL_PA_SHDN_GPIO, event,
+			aw87318_mode_set);
+}
+
+#ifdef ENABLE_FEATURE_HAC
+static const struct soc_enum hac_pa_en_enum =
+	SOC_ENUM_SINGLE_AUTODISABLE_VIRT(ARRAY_SIZE(on_off_texts), on_off_texts);
+#endif
+static const struct soc_enum spkr_pa_shdn_enum =
+	SOC_VALUE_ENUM_SINGLE_AUTODISABLE_VIRT(ARRAY_SIZE(spk_pa_mode_texts),
+			spk_pa_mode_texts, spk_pa_mode_values);
+static const struct soc_enum spkl_pa_shdn_enum =
+	SOC_VALUE_ENUM_SINGLE_AUTODISABLE_VIRT(ARRAY_SIZE(spk_pa_mode_texts),
+			spk_pa_mode_texts, spk_pa_mode_values);
+static const struct soc_enum headphone_switch_en_enum =
+	SOC_ENUM_SINGLE_VIRT(ARRAY_SIZE(on_off_texts), on_off_texts);
+
+/* E2M audio-related DAPM kcontrol */
+#ifdef ENABLE_FEATURE_HAC
+static const struct snd_kcontrol_new hac_pa_en_mux =
+	SOC_DAPM_ENUM_EXT("Hac pa en", hac_pa_en_enum,
+			snd_soc_dapm_get_enum_double, hac_pa_value_put);
+#endif
+static const struct snd_kcontrol_new spkr_pa_shdn_mux =
+	SOC_DAPM_ENUM_EXT("Spkr pa SHDN", spkr_pa_shdn_enum,
+			snd_soc_dapm_get_enum_double, spkr_pa_value_put);
+static const struct snd_kcontrol_new spkl_pa_shdn_mux =
+	SOC_DAPM_ENUM_EXT("Spkl pa SHDN", spkl_pa_shdn_enum,
+			snd_soc_dapm_get_enum_double, spkl_pa_value_put);
+static const struct snd_kcontrol_new headphone_switch_en_mux =
+	SOC_DAPM_ENUM_EXT("Headphone switch en", headphone_switch_en_enum,
+			hp_switch_status_get, hp_switch_status_put);
+
+static const struct snd_soc_dapm_widget e2m_spec_dapm_widgets[] = {
+	/* User space control widget */
+#ifdef ENABLE_FEATURE_HAC
+	SND_SOC_DAPM_VIRT_DEMUX("Hac pa Mux", &hac_pa_en_mux),
+#endif
+	SND_SOC_DAPM_VIRT_DEMUX("Spkr pa Mux", &spkr_pa_shdn_mux),
+	SND_SOC_DAPM_VIRT_DEMUX("Spkl pa Mux", &spkl_pa_shdn_mux),
+	SND_SOC_DAPM_VIRT_DEMUX("Headphone switch Mux", &headphone_switch_en_mux),
+
+	/* E2M spec output interface */
+#ifdef ENABLE_FEATURE_HAC
+	// Hac PA
+	SND_SOC_DAPM_SPK("HAC E2M", hac_pa_event),
+#endif
+	// speaker right PA
+	SND_SOC_DAPM_SPK("SPKR MODE_1 E2M", spkr_pa_event),
+	SND_SOC_DAPM_SPK("SPKR MODE_2 E2M", spkr_pa_event),
+	SND_SOC_DAPM_SPK("SPKR MODE_3 E2M", spkr_pa_event),
+	SND_SOC_DAPM_SPK("SPKR MODE_4 E2M", spkr_pa_event),
+	SND_SOC_DAPM_SPK("SPKR MODE_5 E2M", spkr_pa_event),
+	SND_SOC_DAPM_SPK("SPKR MODE_6 E2M", spkr_pa_event),
+	SND_SOC_DAPM_SPK("SPKR MODE_7 E2M", spkr_pa_event),
+	SND_SOC_DAPM_SPK("SPKR MODE_RECEIVER_1 E2M", spkr_pa_event),
+	SND_SOC_DAPM_SPK("SPKR MODE_RECEIVER_2 E2M", spkr_pa_event),
+	SND_SOC_DAPM_SPK("SPKR MODE_10 E2M", spkr_pa_event),
+	// speaker left PA
+	SND_SOC_DAPM_SPK("SPKL MODE_1 E2M", spkl_pa_event),
+	SND_SOC_DAPM_SPK("SPKL MODE_2 E2M", spkl_pa_event),
+	SND_SOC_DAPM_SPK("SPKL MODE_3 E2M", spkl_pa_event),
+	SND_SOC_DAPM_SPK("SPKL MODE_4 E2M", spkl_pa_event),
+	SND_SOC_DAPM_SPK("SPKL MODE_5 E2M", spkl_pa_event),
+	SND_SOC_DAPM_SPK("SPKL MODE_6 E2M", spkl_pa_event),
+	SND_SOC_DAPM_SPK("SPKL MODE_7 E2M", spkl_pa_event),
+	SND_SOC_DAPM_SPK("SPKL MODE_RECEIVER_1 E2M", spkl_pa_event),
+	SND_SOC_DAPM_SPK("SPKL MODE_RECEIVER_2 E2M", spkl_pa_event),
+	SND_SOC_DAPM_SPK("SPKL MODE_10 E2M", spkl_pa_event),
+	// headphone switch output
+	SND_SOC_DAPM_HP("HEADPHONE E2M", NULL),
+};
+
+static const struct snd_soc_dapm_route e2m_spec_dapm_routes[] = {
+#ifdef ENABLE_FEATURE_HAC
+	/* Hac route */
+	{"Hac pa Mux", NULL, "HPHL PA"},
+	{"HAC E2M", "ENABLE", "Hac pa Mux"},
+#endif
+
+	/* Speaker right mux route */
+	{"Spkr pa Mux", NULL, "HPHR PA"},
+	{"SPKR MODE_1 E2M", "MODE_1", "Spkr pa Mux"},
+	{"SPKR MODE_2 E2M", "MODE_2", "Spkr pa Mux"},
+	{"SPKR MODE_3 E2M", "MODE_3", "Spkr pa Mux"},
+	{"SPKR MODE_4 E2M", "MODE_4", "Spkr pa Mux"},
+	{"SPKR MODE_5 E2M", "MODE_5", "Spkr pa Mux"},
+	{"SPKR MODE_6 E2M", "MODE_6", "Spkr pa Mux"},
+	{"SPKR MODE_7 E2M", "MODE_7", "Spkr pa Mux"},
+	{"SPKR MODE_RECEIVER_1 E2M", "MODE_RECEIVER_1", "Spkr pa Mux"},
+	{"SPKR MODE_RECEIVER_2 E2M", "MODE_RECEIVER_2", "Spkr pa Mux"},
+	{"SPKR MODE_10 E2M", "MODE_10", "Spkr pa Mux"},
+
+	/* Speaker left mux route */
+	{"Spkl pa Mux", NULL, "HPHL PA"},
+	{"SPKL MODE_1 E2M", "MODE_1", "Spkl pa Mux"},
+	{"SPKL MODE_2 E2M", "MODE_2", "Spkl pa Mux"},
+	{"SPKL MODE_3 E2M", "MODE_3", "Spkl pa Mux"},
+	{"SPKL MODE_4 E2M", "MODE_4", "Spkl pa Mux"},
+	{"SPKL MODE_5 E2M", "MODE_5", "Spkl pa Mux"},
+	{"SPKL MODE_6 E2M", "MODE_6", "Spkl pa Mux"},
+	{"SPKL MODE_7 E2M", "MODE_7", "Spkl pa Mux"},
+	{"SPKL MODE_RECEIVER_1 E2M", "MODE_RECEIVER_1", "Spkl pa Mux"},
+	{"SPKL MODE_RECEIVER_2 E2M", "MODE_RECEIVER_2", "Spkl pa Mux"},
+	{"SPKL MODE_10 E2M", "MODE_10", "Spkl pa Mux"},
+
+	/* headphone output route*/
+	{"Headphone switch Mux", NULL, "HPHL PA"},
+	{"Headphone switch Mux", NULL, "HPHR PA"},
+	{"HEADPHONE E2M", NULL, "Headphone switch Mux"},
+};
+// Add end E2M DAPM driver qiujie 2018.0320
+#endif // ENABLE_E2M_CUSTOMIZATION_AUDIO_DRIVER
+
+//fih FTM headset and btn detect-S
+static int audio_plug_type_get(struct snd_kcontrol *kcontrol,
+			   struct snd_ctl_elem_value *ucontrol)
+{
+	int plug_type;
+	
+    plug_type = get_plug_type();
+	ucontrol->value.enumerated.item[0] = plug_type;
+
+	return 0;
+}
+
+static int audio_btn_state_get(struct snd_kcontrol *kcontrol,
+			   struct snd_ctl_elem_value *ucontrol)
+{
+	int btn_state;
+
+	btn_state = get_btn_state();
+	ucontrol->value.enumerated.item[0] = btn_state;
+
+	return 0;
+}
+//fih FTM headset and btn detect-E
+
+
 static int msm_vi_feed_tx_ch_get(struct snd_kcontrol *kcontrol,
 	struct snd_ctl_elem_value *ucontrol)
 {
@@ -1063,6 +1988,19 @@ static const struct soc_enum msm_snd_enum[] = {
 				vi_feed_ch_text),
 	SOC_ENUM_SINGLE_EXT(ARRAY_SIZE(mi2s_rx_sample_rate_text),
 				mi2s_rx_sample_rate_text),
+#ifndef CONFIG_FIH_PROJECT_E2M
+	SOC_ENUM_SINGLE_EXT(2, spk_function),
+	SOC_ENUM_SINGLE_EXT(2, switch_en_function),
+	SOC_ENUM_SINGLE_EXT(2, switch_in_function),
+
+	/*fihtdc 20160822, DanielYJ add for earprice switch*/
+	SOC_ENUM_SINGLE_EXT(2, ear_switch_en_function),
+	SOC_ENUM_SINGLE_EXT(2, ear_switch_in_function),
+#endif
+	/*fihtdc 20160925, DanielYJ add for quat channel*/
+	SOC_ENUM_SINGLE_EXT(ARRAY_SIZE(mi2s_ch_text),
+				mi2s_ch_text),
+
 };
 
 static const struct snd_kcontrol_new msm_snd_controls[] = {
@@ -1084,6 +2022,30 @@ static const struct snd_kcontrol_new msm_snd_controls[] = {
 			msm_vi_feed_tx_ch_get, msm_vi_feed_tx_ch_put),
 	SOC_ENUM_EXT("MI2S_RX SampleRate", msm_snd_enum[6],
 			mi2s_rx_sample_rate_get, mi2s_rx_sample_rate_put),
+#ifndef CONFIG_FIH_PROJECT_E2M
+	/*MM-ChrisYKLu-MS3BringUp-00+{ */
+	SOC_ENUM_EXT("TI Speaker Function", msm_snd_enum[7], msm8952_ti_get_spk,
+			msm8952_ti_set_spk),
+	SOC_ENUM_EXT("Switch EN", msm_snd_enum[8], msm8952_get_sw_en,
+			msm8952_set_sw_en),
+	SOC_ENUM_EXT("Switch IN", msm_snd_enum[9], msm8952_get_sw_in,
+			msm8952_set_sw_in),
+	/*MM-ChrisYKLu-MS3BringUp-00+} */
+	/*fihtdc 20160822, DanielYJ add for earprice switch*/
+	SOC_ENUM_EXT("Ear Switch EN", msm_snd_enum[10], msm8952_get_ear_sw_en,
+			msm8952_set_ear_sw_en),
+	SOC_ENUM_EXT("Ear Switch IN", msm_snd_enum[11], msm8952_get_ear_sw_in,
+			msm8952_set_ear_sw_in),
+#endif
+	SOC_ENUM_EXT("QUAT_MI2S_RX Channels", msm_snd_enum[12],
+			msm_quat_mi2s_rx_ch_get, msm_quat_mi2s_rx_ch_put),
+	//fih FTM headset and btn detect-S
+	SOC_ENUM_EXT("plug_type", audio_plug_type, audio_plug_type_get,
+			NULL),
+	SOC_ENUM_EXT("btn_state", audio_btn_state, audio_btn_state_get,
+			NULL),
+	//fih FTM headset and btn detect-E
+
 };
 
 static int msm8952_mclk_event(struct snd_soc_dapm_widget *w,
@@ -1401,6 +2363,7 @@ static int msm_sec_mi2s_snd_startup(struct snd_pcm_substream *substream)
 
 	if (!q6core_is_adsp_ready()) {
 		pr_err("%s(): adsp not ready\n", __func__);
+                BUG_ON(1);
 		return -EINVAL;
 	}
 
@@ -1480,6 +2443,7 @@ static int msm_quat_mi2s_snd_startup(struct snd_pcm_substream *substream)
 
 	if (!q6core_is_adsp_ready()) {
 		pr_err("%s(): adsp not ready\n", __func__);
+                BUG_ON(1);
 		return -EINVAL;
 	}
 
@@ -1608,7 +2572,11 @@ static void *def_msm8952_wcd_mbhc_cal(void)
 		return NULL;
 
 #define S(X, Y) ((WCD_MBHC_CAL_PLUG_TYPE_PTR(msm8952_wcd_cal)->X) = (Y))
-	S(v_hs_max, 1500);
+#ifndef CONFIG_FIH_PROJECT_E2M
+	S(v_hs_max, 1700);//1500/* MM-ChrisYKLu-fix HS detect-00* */
+#else
+	S(v_hs_max, 1600);
+#endif
 #undef S
 #define S(X, Y) ((WCD_MBHC_CAL_BTN_DET_PTR(msm8952_wcd_cal)->X) = (Y))
 	S(num_btn, WCD_MBHC_DEF_BUTTONS);
@@ -1620,6 +2588,23 @@ static void *def_msm8952_wcd_mbhc_cal(void)
 	btn_high = ((void *)&btn_cfg->_v_btn_low) +
 		(sizeof(btn_cfg->_v_btn_low[0]) * btn_cfg->num_btn);
 
+#ifdef CONFIG_FIH_PROJECT_E2M
+//#define FIH_FEATURE_TUNING_MBHC_THRESHOLD
+#endif
+
+#ifdef FIH_FEATURE_TUNING_MBHC_THRESHOLD
+	btn_low[0] = 75;
+	btn_low[1] = 112;
+	btn_low[2] = 212;
+	btn_low[3] = 450;
+	btn_low[4] = 500;
+
+	btn_high[0] = 75;
+	btn_high[1] = 112;
+	btn_high[2] = 200;
+	btn_high[3] = 450;
+	btn_high[4] = 500;
+#else /* FIH_FEATURE_TUNING_MBHC_THRESHOLD */
 	/*
 	 * In SW we are maintaining two sets of threshold register
 	 * one for current source and another for Micbias.
@@ -1631,16 +2616,17 @@ static void *def_msm8952_wcd_mbhc_cal(void)
 	 * 210-290 == Button 2
 	 * 360-680 == Button 3
 	 */
-	btn_low[0] = 75;
-	btn_high[0] = 75;
-	btn_low[1] = 150;
-	btn_high[1] = 150;
-	btn_low[2] = 225;
-	btn_high[2] = 225;
-	btn_low[3] = 450;
-	btn_high[3] = 450;
-	btn_low[4] = 500;
+	btn_low[0] = 100;
+	btn_high[0] = 100;
+	btn_low[1] = 225;
+	btn_high[1] = 225;
+	btn_low[2] = 430;    //[PLE-662]:tuning the btn threshold value non volume down when plug headset
+	btn_high[2] = 500;
+	btn_low[3] = 430;    //[PLE-662]:tuning the btn threshold value non volume down when plug headset
+	btn_high[3] = 500;
+	btn_low[4] = 430;    //[PLE-662]:tuning the btn threshold value non volume down when plug headset
 	btn_high[4] = 500;
+#endif /* FIH_FEATURE_TUNING_MBHC_THRESHOLD */
 
 	return msm8952_wcd_cal;
 }
@@ -1659,6 +2645,14 @@ static int msm_audrx_init(struct snd_soc_pcm_runtime *rtd)
 
 	snd_soc_dapm_new_controls(dapm, msm8952_dapm_widgets,
 			ARRAY_SIZE(msm8952_dapm_widgets));
+#ifdef ENABLE_E2M_CUSTOMIZATION_AUDIO_DRIVER
+	// Add start E2M DAPM driver qiujie 2018.0320
+	snd_soc_dapm_new_controls(dapm, e2m_spec_dapm_widgets,
+			ARRAY_SIZE(e2m_spec_dapm_widgets));
+	snd_soc_dapm_add_routes(dapm, e2m_spec_dapm_routes,
+			ARRAY_SIZE(e2m_spec_dapm_routes));
+	// Add end E2M DAPM driver qiujie 2018.0320
+#endif
 
 	snd_soc_dapm_ignore_suspend(dapm, "Handset Mic");
 	snd_soc_dapm_ignore_suspend(dapm, "Headset Mic");
@@ -1681,7 +2675,14 @@ static int msm_audrx_init(struct snd_soc_pcm_runtime *rtd)
 
 	msm8x16_wcd_spk_ext_pa_cb(enable_spk_ext_pa, codec);
 	msm8x16_wcd_hph_comp_cb(config_hph_compander_gpio, codec);
+#ifndef CONFIG_FIH_PROJECT_E2M
+	/* MM-ChrisYKLu-headphoneSwitch-00+{ */
+	msm8x16_wcd_headphone_switch(enable_headphone_switch, codec);
+	/* MM-ChrisYKLu-headphoneSwitch-00+} */
 
+	/*fihtdc 20160822, DanielYJ add for earprice switch*/
+	msm8x16_wcd_ear_switch(enable_ear_switch, codec);
+#endif
 	mbhc_cfg.calibration = def_msm8952_wcd_mbhc_cal();
 	if (mbhc_cfg.calibration) {
 		ret = msm8x16_wcd_hs_detect(codec, &mbhc_cfg);
@@ -2484,7 +3485,7 @@ static struct snd_soc_dai_link msm8952_dai[] = {
 		.no_pcm = 1,
 		.dpcm_playback = 1,
 		.be_id = MSM_BACKEND_DAI_QUATERNARY_MI2S_RX,
-		.be_hw_params_fixup = msm_mi2s_rx_be_hw_params_fixup,
+		.be_hw_params_fixup = msm_quat_be_hw_params_fixup,
 		.ops = &msm8952_quat_mi2s_be_ops,
 		.ignore_pmdown_time = 1, /* dai link has playback support */
 		.ignore_suspend = 1,
@@ -2499,7 +3500,7 @@ static struct snd_soc_dai_link msm8952_dai[] = {
 		.no_pcm = 1,
 		.dpcm_capture = 1,
 		.be_id = MSM_BACKEND_DAI_QUATERNARY_MI2S_TX,
-		.be_hw_params_fixup = msm_be_hw_params_fixup,
+		.be_hw_params_fixup = msm_quat_tx_be_hw_params_fixup,
 		.ops = &msm8952_quat_mi2s_be_ops,
 		.ignore_suspend = 1,
 	},
@@ -3067,6 +4068,17 @@ static int msm8952_asoc_machine_probe(struct platform_device *pdev)
 	const char *mclk = "qcom,msm-mclk-freq";
 	const char *wsa = "asoc-wsa-codec-names";
 	const char *wsa_prefix = "asoc-wsa-codec-prefixes";
+#ifdef ENABLE_E2M_CUSTOMIZATION_AUDIO_DRIVER
+	// Add start E2M DAPM driver qiujie 2018.0320
+	// e2m audio-related special gpio-names
+#ifdef ENABLE_FEATURE_HAC
+	const char *hac_pa_en_gpio_name = "tpa2011d1,hac-pa-en";
+#endif
+	const char *spkr_pa_shdn_gpio_name = "aw87318,spkr-pa-shdn";
+	const char *spkl_pa_shdn_gpio_name = "aw87318,spkl-pa-shdn";
+	const char *headphone_switch_en_gpio_name = "was4761q,hp-switch-en";
+	// Add end E2M DAPM driver qiujie 2018.0320
+#endif // ENABLE_E2M_CUSTOMIZATION_AUDIO_DRIVER
 	const char *type = NULL;
 	const char *ext_pa_str = NULL;
 	const char *wsa_str = NULL;
@@ -3096,6 +4108,49 @@ static int msm8952_asoc_machine_probe(struct platform_device *pdev)
 		ret = -ENOMEM;
 		goto err1;
 	}
+
+#ifdef ENABLE_E2M_CUSTOMIZATION_AUDIO_DRIVER
+	// Add start E2M DAPM driver qiujie 2018.0320
+	// get e2m audio-related special gpio number
+#ifdef ENABLE_FEATURE_HAC
+	e2m_audio_spec_gpios[E2M_HAC_PA_EN_GPIO] =
+		devm_gpiod_get(&pdev->dev, hac_pa_en_gpio_name, GPIOD_OUT_LOW);
+#endif
+	e2m_audio_spec_gpios[E2M_SPKR_PA_SHDN_GPIO] =
+		devm_gpiod_get(&pdev->dev, spkr_pa_shdn_gpio_name, GPIOD_OUT_LOW);
+	e2m_audio_spec_gpios[E2M_SPKL_PA_SHDN_GPIO] =
+		devm_gpiod_get(&pdev->dev, spkl_pa_shdn_gpio_name, GPIOD_OUT_LOW);
+	e2m_audio_spec_gpios[E2M_HEADPHONE_SWITCH_EN_GPIO] =
+		devm_gpiod_get(&pdev->dev, headphone_switch_en_gpio_name, GPIOD_OUT_HIGH);
+
+#ifdef ENABLE_FEATURE_HAC
+	if (IS_ERR(e2m_audio_spec_gpios[E2M_HAC_PA_EN_GPIO])) {
+		dev_err(&pdev->dev, "%s e2m hac pa en gpio is unavailable\n", __func__);
+		ret = -ENODEV;
+		goto err1;
+	}
+#endif
+	if (IS_ERR(e2m_audio_spec_gpios[E2M_SPKR_PA_SHDN_GPIO])) {
+		dev_err(&pdev->dev, "%s e2m spkr pa shdn gpio is unavailable\n", __func__);
+		ret = -ENODEV;
+#ifdef ENABLE_FEATURE_HAC
+		goto free_e2m_audio_spec_gpios_1;
+#else
+		goto err1;
+#endif
+	}
+	if (IS_ERR(e2m_audio_spec_gpios[E2M_SPKL_PA_SHDN_GPIO])) {
+		dev_err(&pdev->dev, "%s e2m spkl pa shdn gpio is unavailable\n", __func__);
+		ret = -ENODEV;
+		goto free_e2m_audio_spec_gpios_2;
+	}
+	if (IS_ERR(e2m_audio_spec_gpios[E2M_HEADPHONE_SWITCH_EN_GPIO])) {
+		dev_err(&pdev->dev, "%s e2m headphone switch en gpio is unavailable\n", __func__);
+		ret = -ENODEV;
+		goto free_e2m_audio_spec_gpios_3;
+	}
+	// Add end E2M DAPM driver qiujie 2018.0320
+#endif // ENABLE_E2M_CUSTOMIZATION_AUDIO_DRIVER
 
 	muxsel = platform_get_resource_byname(pdev, IORESOURCE_MEM,
 			"csr_gp_io_mux_spkr_ctl");
@@ -3271,6 +4326,21 @@ parse_mclk_freq:
 		pr_err("%s:  doesn't support external speaker pa\n",
 				__func__);
 
+#ifndef CONFIG_FIH_PROJECT_E2M
+	/* MM-ChrisYKLu-popnoise-00+{ */
+	ret = is_headphone_switch_gpio_support(pdev, pdata);
+	if (ret < 0)
+		pr_err("%s:  doesn't support headphone switch\n",
+				__func__);
+	/* MM-ChrisYKLu-popnoise-00+} */
+
+	/*fihtdc 20160822, DanielYJ add for earprice switch*/
+	ret = is_ear_switch_gpio_support(pdev, pdata);
+	if (ret < 0)
+		pr_err("%s:  doesn't support earprice switch\n",
+				__func__);
+#endif
+
 	ret = of_property_read_string(pdev->dev.of_node,
 		hs_micbias_type, &type);
 	if (ret) {
@@ -3352,6 +4422,10 @@ parse_mclk_freq:
 			ret);
 		goto err;
 	}
+#ifndef CONFIG_FIH_PROJECT_E2M
+	/*fihtdc 20160413, danielyj add for ExtSpkAmp flag*/
+	fih_ext_spk_amp_init(pdev);
+#endif
 	return 0;
 err:
 	if (pdata->vaddr_gpio_mux_spkr_ctl)
@@ -3369,6 +4443,20 @@ err:
 			kfree(msm8952_codec_conf[i].name_prefix);
 		}
 	}
+#ifdef ENABLE_E2M_CUSTOMIZATION_AUDIO_DRIVER
+	// Add start E2M DAPM driver qiujie 2018.0320
+	// err, free gpio
+	devm_gpiod_put(&pdev->dev, e2m_audio_spec_gpios[E2M_HEADPHONE_SWITCH_EN_GPIO]);
+free_e2m_audio_spec_gpios_3:
+	devm_gpiod_put(&pdev->dev, e2m_audio_spec_gpios[E2M_SPKL_PA_SHDN_GPIO]);
+free_e2m_audio_spec_gpios_2:
+	devm_gpiod_put(&pdev->dev, e2m_audio_spec_gpios[E2M_SPKR_PA_SHDN_GPIO]);
+#ifdef ENABLE_FEATURE_HAC
+free_e2m_audio_spec_gpios_1:
+	devm_gpiod_put(&pdev->dev, e2m_audio_spec_gpios[E2M_HAC_PA_EN_GPIO]);
+#endif
+	// Add end E2M DAPM driver qiujie 2018.0320
+#endif // ENABLE_E2M_CUSTOMIZATION_AUDIO_DRIVER
 err1:
 	devm_kfree(&pdev->dev, pdata);
 	return ret;
@@ -3397,6 +4485,17 @@ static int msm8952_asoc_machine_remove(struct platform_device *pdev)
 		mutex_destroy(&pdata->wsa_mclk_mutex);
 	}
 	snd_soc_unregister_card(card);
+#ifdef ENABLE_E2M_CUSTOMIZATION_AUDIO_DRIVER
+	// Add start E2M DAPM driver qiujie 2018.0320
+	// free gpio
+	devm_gpiod_put(&pdev->dev, e2m_audio_spec_gpios[E2M_HEADPHONE_SWITCH_EN_GPIO]);
+	devm_gpiod_put(&pdev->dev, e2m_audio_spec_gpios[E2M_SPKL_PA_SHDN_GPIO]);
+	devm_gpiod_put(&pdev->dev, e2m_audio_spec_gpios[E2M_SPKR_PA_SHDN_GPIO]);
+#ifdef ENABLE_FEATURE_HAC
+	devm_gpiod_put(&pdev->dev, e2m_audio_spec_gpios[E2M_HAC_PA_EN_GPIO]);
+#endif
+	// Add end E2M DAPM driver qiujie 2018.0320
+#endif // ENABLE_E2M_CUSTOMIZATION_AUDIO_DRIVER
 	mutex_destroy(&pdata->cdc_mclk_mutex);
 	return 0;
 }

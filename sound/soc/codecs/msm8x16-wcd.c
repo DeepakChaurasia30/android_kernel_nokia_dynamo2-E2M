@@ -114,6 +114,9 @@ enum {
 #define VOLTAGE_CONVERTER(value, min_value, step_size)\
 	((value - min_value)/step_size)
 
+#define BBOX_WCD_SPMI_PROBE_FAILED do {printk("BBox::UEC;2::1\n");} while(0);
+#define BBOX_WCD_REGISTER_ADSP_NOTIFIER_FAILED do {printk("BBox::UEC;2::2\n");} while(0);
+
 enum {
 	AIF1_PB = 0,
 	AIF1_CAP,
@@ -134,7 +137,13 @@ static const DECLARE_TLV_DB_SCALE(digital_gain, 0, 1, 0);
 static const DECLARE_TLV_DB_SCALE(analog_gain, 0, 25, 1);
 static struct snd_soc_dai_driver msm8x16_wcd_i2s_dai[];
 /* By default enable the internal speaker boost */
+/* MM-ChrisYKLu-popnoise-00+{ */
 static bool spkr_boost_en = true;
+#ifndef CONFIG_FIH_PROJECT_E2M
+bool current_ext_spk_pa_state = false;
+static int HPH_switch_en_flag = 0;
+#endif
+/* MM-ChrisYKLu-popnoise-00+} */
 
 #define MSM8X16_WCD_ACQUIRE_LOCK(x) \
 	mutex_lock_nested(&x, SINGLE_DEPTH_NESTING)
@@ -457,6 +466,31 @@ void msm8x16_wcd_spk_ext_pa_cb(
 	msm8x16_wcd->codec_spk_ext_pa_cb = codec_spk_ext_pa;
 }
 
+#ifndef CONFIG_FIH_PROJECT_E2M
+/* MM-ChrisYKLu-headphoneSwitch-00+{ */
+void msm8x16_wcd_headphone_switch(
+		int (*codec_headphone_switch)(struct snd_soc_codec *codec,
+			int enable), struct snd_soc_codec *codec)
+{
+	struct msm8x16_wcd_priv *msm8x16_wcd = snd_soc_codec_get_drvdata(codec);
+
+	pr_debug("%s: Enter\n", __func__);
+	msm8x16_wcd->codec_headphone_switch_cb = codec_headphone_switch;
+}
+/* MM-ChrisYKLu-headphoneSwitch-00+} */
+
+/*fihtdc 20160822, DanielYJ add for earprice switch*/
+void msm8x16_wcd_ear_switch(
+		int (*codec_ear_switch)(struct snd_soc_codec *codec,
+			int enable), struct snd_soc_codec *codec)
+{
+	struct msm8x16_wcd_priv *msm8x16_wcd = snd_soc_codec_get_drvdata(codec);
+
+	pr_debug("%s: Enter\n", __func__);
+	msm8x16_wcd->codec_ear_switch_cb = codec_ear_switch;
+}
+#endif
+
 void msm8x16_wcd_hph_comp_cb(
 	int (*codec_hph_comp_gpio)(bool enable), struct snd_soc_codec *codec)
 {
@@ -716,6 +750,15 @@ static void msm8x16_wcd_mbhc_calc_impedance(struct wcd_mbhc *mbhc, uint32_t *zl,
 	bool min_range_used =  false;
 
 	WCD_MBHC_RSC_ASSERT_LOCKED(mbhc);
+#if 0 //peterpcshen: remove this workaround once L or R bypass switch	
+	/* MM-ChrisYKLu-headphoneSwitch-00+{ */
+	/* Side effect: When speaker is playing, sound would output to headphone
+	for a short time.
+	Should remove this workaround once L or R bypass switch */
+	if (msm8x16_wcd->codec_headphone_switch_cb)
+		msm8x16_wcd->codec_headphone_switch_cb(codec, 1);
+#endif	
+	/* MM-ChrisYKLu-headphoneSwitch-00+} */
 	reg0 = snd_soc_read(codec, MSM8X16_WCD_A_ANALOG_MBHC_DBNC_TIMER);
 	reg1 = snd_soc_read(codec, MSM8X16_WCD_A_ANALOG_MBHC_BTN2_ZDETH_CTL);
 	reg2 = snd_soc_read(codec, MSM8X16_WCD_A_ANALOG_MBHC_DET_CTL_2);
@@ -956,7 +999,13 @@ exit:
 	msm8x16_wcd_compute_impedance(codec, impedance_l, impedance_r,
 				      zl, zr, high);
 
-	pr_debug("%s: RL %d ohm, RR %d ohm\n", __func__, *zl, *zr);
+#if 0 //peterpcshen: remove this workaround once L or R bypass switch
+	/* MM-ChrisYKLu-headphoneSwitch-00+{ */
+	if (msm8x16_wcd->codec_headphone_switch_cb)
+		msm8x16_wcd->codec_headphone_switch_cb(codec, HPH_switch_en_flag);
+	/* MM-ChrisYKLu-headphoneSwitch-00+} */
+#endif
+	pr_info("%s: RL %d ohm, RR %d ohm\n", __func__, *zl, *zr);
 	pr_debug("%s: Impedance detection completed\n", __func__);
 }
 
@@ -2818,6 +2867,18 @@ static const char * const adc2_mux_text[] = {
 static const char * const ext_spk_text[] = {
 	"Off", "On"
 };
+#ifndef CONFIG_FIH_PROJECT_E2M
+/* MM-ChrisYKLu-headphoneSwitch-00+{ */
+static const char * const headphone_sw_text[] = {
+	"Off", "On"
+};
+/* MM-ChrisYKLu-headphoneSwitch-00+} */
+
+/*fihtdc 20160822, DanielYJ add for earprice switch*/
+static const char * const ear_sw_text[] = {
+	"Off", "On"
+};
+#endif
 
 static const char * const wsa_spk_text[] = {
 	"ZERO", "WSA"
@@ -2838,6 +2899,19 @@ static const struct soc_enum adc2_enum =
 static const struct soc_enum ext_spk_enum =
 	SOC_ENUM_SINGLE(SND_SOC_NOPM, 0,
 		ARRAY_SIZE(ext_spk_text), ext_spk_text);
+
+#ifndef CONFIG_FIH_PROJECT_E2M
+/* MM-ChrisYKLu-headphoneSwitch-00+{ */
+static const struct soc_enum headphone_sw_enum =
+	SOC_ENUM_SINGLE(SND_SOC_NOPM, 0,
+		ARRAY_SIZE(headphone_sw_text), headphone_sw_text);
+/* MM-ChrisYKLu-headphoneSwitch-00+} */
+
+/*fihtdc 20160822, DanielYJ add for earprice switch*/
+static const struct soc_enum ear_sw_enum =
+	SOC_ENUM_SINGLE(SND_SOC_NOPM, 0,
+		ARRAY_SIZE(ear_sw_text), ear_sw_text);
+#endif
 
 static const struct soc_enum wsa_spk_enum =
 	SOC_ENUM_SINGLE(SND_SOC_NOPM, 0,
@@ -2923,6 +2997,17 @@ static const struct soc_enum iir2_inp1_mux_enum =
 
 static const struct snd_kcontrol_new ext_spk_mux =
 	SOC_DAPM_ENUM("Ext Spk Switch Mux", ext_spk_enum);
+
+#ifndef CONFIG_FIH_PROJECT_E2M
+/* MM-ChrisYKLu-headphoneSwitch-00+{ */
+static const struct snd_kcontrol_new headphone_sw_mux =
+	SOC_DAPM_ENUM("Headphone SW Switch Mux", headphone_sw_enum);
+/* MM-ChrisYKLu-headphoneSwitch-00+} */
+
+/*fihtdc 20160822, DanielYJ add for earprice switch*/
+static const struct snd_kcontrol_new ear_sw_mux =
+	SOC_DAPM_ENUM("Ear SW Switch Mux", ear_sw_enum);
+#endif
 
 static const struct snd_kcontrol_new rx_mix1_inp1_mux =
 	SOC_DAPM_ENUM("RX1 MIX1 INP1 Mux", rx_mix1_inp1_chain_enum);
@@ -3536,14 +3621,13 @@ static int msm8x16_wcd_codec_enable_micbias(struct snd_soc_dapm_widget *w,
 	struct snd_soc_codec *codec = w->codec;
 	struct msm8x16_wcd_priv *msm8x16_wcd =
 				snd_soc_codec_get_drvdata(codec);
-	u16 micb_int_reg;
+	u16 micb_int_reg,value;
 	char *internal1_text = "Internal1";
 	char *internal2_text = "Internal2";
 	char *internal3_text = "Internal3";
 	char *external2_text = "External2";
 	char *external_text = "External";
 	bool micbias2;
-
 	dev_dbg(codec->dev, "%s %d\n", __func__, event);
 	switch (w->reg) {
 	case MSM8X16_WCD_A_ANALOG_MICB_1_EN:
@@ -3581,13 +3665,16 @@ static int msm8x16_wcd_codec_enable_micbias(struct snd_soc_dapm_widget *w,
 			snd_soc_update_bits(codec,
 					MSM8X16_WCD_A_ANALOG_TX_1_2_ATEST_CTL_2,
 					0x02, 0x02);
+/*EvenlyHYWang add for set Reg0x143 0x0 to reduce noise*/
+			value=0x0;
+			snd_soc_write(codec, micb_int_reg, value);
+/*EvenlyHYWang add for set Reg0x143 0x0 to reduce noise*/
 		}
 		if (!strnstr(w->name, external_text, strlen(w->name)))
 			snd_soc_update_bits(codec,
 				MSM8X16_WCD_A_ANALOG_MICB_1_EN, 0x05, 0x04);
 		if (w->reg == MSM8X16_WCD_A_ANALOG_MICB_1_EN)
 			msm8x16_wcd_configure_cap(codec, true, micbias2);
-
 		break;
 	case SND_SOC_DAPM_POST_PMU:
 		if (get_codec_version(msm8x16_wcd) <= TOMBAK_2_0)
@@ -4122,7 +4209,11 @@ void wcd_imped_config(struct snd_soc_codec *codec,
 			if (value >= 13) {
 				snd_soc_update_bits(codec,
 					MSM8X16_WCD_A_ANALOG_RX_EAR_CTL,
+#ifndef CONFIG_FIH_PROJECT_E2M
+					0x20, 0x00);/*0x20*/ /*MM-CL-HS-type-00*/
+#else
 					0x20, 0x20);
+#endif
 				snd_soc_update_bits(codec,
 					MSM8X16_WCD_A_ANALOG_NCP_VCTRL,
 					0x07, 0x07);
@@ -4438,6 +4529,17 @@ static const struct snd_soc_dapm_route audio_map[] = {
 	{"Ext Spk", NULL, "Ext Spk Switch"},
 	{"Ext Spk Switch", "On", "HPHL PA"},
 	{"Ext Spk Switch", "On", "HPHR PA"},
+#ifndef CONFIG_FIH_PROJECT_E2M
+	/* MM-ChrisYKLu-headphoneSwitch-00+{ */
+	{"Headphone SW", NULL, "Headphone SW Switch"},
+	{"Headphone SW Switch", "On", "HPHL PA"},
+	{"Headphone SW Switch", "On", "HPHR PA"},
+	/* MM-ChrisYKLu-headphoneSwitch-00+} */
+
+	/*fihtdc 20160822, DanielYJ add for earprice switch*/
+	{"Ear SW", NULL, "Ear SW Switch"},
+	{"Ear SW Switch", "On", "EAR PA"},
+#endif
 
 	{"HPHL PA", NULL, "HPHL"},
 	{"HPHR PA", NULL, "HPHR"},
@@ -4947,16 +5049,81 @@ static int msm8x16_wcd_codec_enable_spk_ext_pa(struct snd_soc_dapm_widget *w,
 			"%s: enable external speaker PA\n", __func__);
 		if (msm8x16_wcd->codec_spk_ext_pa_cb)
 			msm8x16_wcd->codec_spk_ext_pa_cb(codec, 1);
+#ifndef CONFIG_FIH_PROJECT_E2M
+		/* MM-ChrisYKLu-popnoise-00+{ */
+		current_ext_spk_pa_state = true;
+		/* MM-ChrisYKLu-popnoise-00+} */
+#endif
 		break;
 	case SND_SOC_DAPM_PRE_PMD:
 		dev_dbg(w->codec->dev,
-			"%s: enable external speaker PA\n", __func__);
+			"%s: disable external speaker PA\n", __func__);
 		if (msm8x16_wcd->codec_spk_ext_pa_cb)
 			msm8x16_wcd->codec_spk_ext_pa_cb(codec, 0);
+#ifndef CONFIG_FIH_PROJECT_E2M
+		/* MM-ChrisYKLu-popnoise-00+{ */
+		current_ext_spk_pa_state = false;
+		/* MM-ChrisYKLu-popnoise-00+} */
+#endif
 		break;
 	}
 	return 0;
 }
+
+#ifndef CONFIG_FIH_PROJECT_E2M
+/* MM-ChrisYKLu-headphoneSwitch-00+{ */
+static int msm8x16_wcd_codec_enable_headphone_switch(struct snd_soc_dapm_widget *w,
+		struct snd_kcontrol *kcontrol, int event)
+{
+	struct snd_soc_codec *codec = w->codec;
+	struct msm8x16_wcd_priv *msm8x16_wcd = snd_soc_codec_get_drvdata(codec);
+
+	dev_dbg(codec->dev, "%s: %s event = %d\n", __func__, w->name, event);
+	switch (event) {
+	case SND_SOC_DAPM_POST_PMU:
+		dev_dbg(w->codec->dev,
+			"%s: enable headphone switch\n", __func__);
+		if (msm8x16_wcd->codec_headphone_switch_cb)
+			msm8x16_wcd->codec_headphone_switch_cb(codec, 1);
+		HPH_switch_en_flag = 1;
+		break;
+	case SND_SOC_DAPM_PRE_PMD:
+		dev_dbg(w->codec->dev,
+			"%s: disable headphone switch\n", __func__);
+		if (msm8x16_wcd->codec_headphone_switch_cb)
+			msm8x16_wcd->codec_headphone_switch_cb(codec, 0);
+		HPH_switch_en_flag = 0;
+		break;
+	}
+	return 0;
+}
+/* MM-ChrisYKLu-headphoneSwitch-00+} */
+
+/*fihtdc 20160822, DanielYJ add for earprice switch*/
+static int msm8x16_wcd_codec_enable_ear_switch(struct snd_soc_dapm_widget *w,
+		struct snd_kcontrol *kcontrol, int event)
+{
+	struct snd_soc_codec *codec = w->codec;
+	struct msm8x16_wcd_priv *msm8x16_wcd = snd_soc_codec_get_drvdata(codec);
+
+	dev_dbg(codec->dev, "%s: %s event = %d\n", __func__, w->name, event);
+	switch (event) {
+	case SND_SOC_DAPM_POST_PMU:
+		dev_dbg(w->codec->dev,
+			"%s: enable earprice switch\n", __func__);
+		if (msm8x16_wcd->codec_ear_switch_cb)
+			msm8x16_wcd->codec_ear_switch_cb(codec, 1);
+		break;
+	case SND_SOC_DAPM_PRE_PMD:
+		dev_dbg(w->codec->dev,
+			"%s: disable earprice switch\n", __func__);
+		if (msm8x16_wcd->codec_ear_switch_cb)
+			msm8x16_wcd->codec_ear_switch_cb(codec, 0);
+		break;
+	}
+	return 0;
+}
+#endif
 
 static int msm8x16_wcd_codec_enable_ear_pa(struct snd_soc_dapm_widget *w,
 	struct snd_kcontrol *kcontrol, int event)
@@ -5053,6 +5220,14 @@ static const struct snd_soc_dapm_widget msm8x16_wcd_dapm_widgets[] = {
 	SND_SOC_DAPM_SUPPLY("INT_LDO_H", SND_SOC_NOPM, 1, 0, NULL, 0),
 
 	SND_SOC_DAPM_SPK("Ext Spk", msm8x16_wcd_codec_enable_spk_ext_pa),
+#ifndef CONFIG_FIH_PROJECT_E2M
+	/* MM-ChrisYKLu-headphoneSwitch-00+{ */
+	SND_SOC_DAPM_HP("Headphone SW", msm8x16_wcd_codec_enable_headphone_switch),
+	/* MM-ChrisYKLu-headphoneSwitch-00+} */
+
+	/*fihtdc 20160822, DanielYJ add for earprice switch*/
+	SND_SOC_DAPM_HP("Ear SW", msm8x16_wcd_codec_enable_ear_switch),
+#endif
 
 	SND_SOC_DAPM_OUTPUT("HEADPHONE"),
 	SND_SOC_DAPM_PGA_E("HPHL PA", MSM8X16_WCD_A_ANALOG_RX_HPH_CNP_EN,
@@ -5120,6 +5295,16 @@ static const struct snd_soc_dapm_widget msm8x16_wcd_dapm_widgets[] = {
 
 	SND_SOC_DAPM_MUX("Ext Spk Switch", SND_SOC_NOPM, 0, 0,
 		&ext_spk_mux),
+#ifndef CONFIG_FIH_PROJECT_E2M
+	/* MM-ChrisYKLu-headphoneSwitch-00+{ */
+	SND_SOC_DAPM_MUX("Headphone SW Switch", SND_SOC_NOPM, 0, 0,
+		&headphone_sw_mux),
+	/* MM-ChrisYKLu-headphoneSwitch-00+} */
+
+	/*fihtdc 20160822, DanielYJ add for earprice switch*/
+	SND_SOC_DAPM_MUX("Ear SW Switch", SND_SOC_NOPM, 0, 0,
+		&ear_sw_mux),
+#endif
 
 	SND_SOC_DAPM_MIXER("RX1 MIX1", SND_SOC_NOPM, 0, 0, NULL, 0),
 	SND_SOC_DAPM_MIXER("RX2 MIX1", SND_SOC_NOPM, 0, 0, NULL, 0),
@@ -5908,6 +6093,8 @@ static int msm8x16_wcd_codec_probe(struct snd_soc_codec *codec)
 	}
 	if (!adsp_state_notifier) {
 		dev_err(codec->dev, "Failed to register adsp state notifier\n");
+		printk("BBox;Failed to register adsp state notifier\n");
+		BBOX_WCD_REGISTER_ADSP_NOTIFIER_FAILED;
 		iounmap(msm8x16_wcd->dig_base);
 		kfree(msm8x16_wcd_priv->fw_data);
 		kfree(msm8x16_wcd_priv);
@@ -6306,6 +6493,8 @@ register_codec:
 				dev_err(&spmi->dev,
 				"%s:snd_soc_register_codec failed with error %d\n",
 				__func__, ret);
+				printk("BBox;snd_soc_register_codec failed\n");
+				BBOX_WCD_SPMI_PROBE_FAILED;
 				goto err_supplies;
 			}
 		}

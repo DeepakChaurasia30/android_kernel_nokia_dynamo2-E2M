@@ -30,6 +30,30 @@
 #include "wcd-mbhc-v2.h"
 #include "wcdcal-hwdep.h"
 
+//fih FTM headset and btn detect-S
+atomic_t fih_btn_state;
+atomic_t fih_plug_type;
+
+int get_plug_type(void)
+{
+    int plug_type;
+
+    plug_type = atomic_read(&fih_plug_type);
+	return (plug_type + 1);
+}
+EXPORT_SYMBOL(get_plug_type);
+
+int get_btn_state(void)
+{
+    int btn_state;
+
+    btn_state = atomic_read(&fih_btn_state);
+	return btn_state;
+}
+EXPORT_SYMBOL(get_btn_state);
+//fih FTM headset and btn detect-E
+
+
 #define WCD_MBHC_JACK_MASK (SND_JACK_HEADSET | SND_JACK_OC_HPHL | \
 			   SND_JACK_OC_HPHR | SND_JACK_LINEOUT | \
 			   SND_JACK_MECHANICAL | SND_JACK_MICROPHONE2 | \
@@ -54,11 +78,55 @@
 #define WCD_MBHC_BTN_PRESS_COMPL_TIMEOUT_MS  50
 #define ANC_DETECT_RETRY_CNT 7
 #define WCD_MBHC_SPL_HS_CNT  2
-
+#ifndef CONFIG_FIH_PROJECT_E2M
+/* MM-ChrisYKLu-MBHC-00+{ */
+extern bool current_ext_spk_pa_state;
+/* MM-ChrisYKLu-MBHC-00+} */
+#endif
 static int det_extn_cable_en;
 module_param(det_extn_cable_en, int,
 		S_IRUGO | S_IWUSR | S_IWGRP);
 MODULE_PARM_DESC(det_extn_cable_en, "enable/disable extn cable detect");
+
+//ChrisYKLu add for FTM
+#define LEGACY_SWITCH_DEV_SUPPORT
+#ifdef LEGACY_SWITCH_DEV_SUPPORT
+#include <linux/switch.h>
+#include <asm/atomic.h>
+
+struct h2w_info {
+	struct switch_dev sdev;
+	atomic_t btn_state;
+	atomic_t hs_state;
+};
+static struct h2w_info *fih_hs;
+
+static ssize_t trout_h2w_print_name(struct switch_dev *sdev, char *buf)
+{
+       int state = 0;
+       state = switch_get_state(&fih_hs->sdev);
+
+	switch (state) 
+	{
+		case 0://PLUG_TYPE_NONE:
+			return sprintf(buf, "No Device\n");
+		case 1://PLUG_TYPE_HEADSET:         
+			return sprintf(buf, "Headset\n");
+		case 2://PLUG_TYPE_HEADPHONE: 
+			return sprintf(buf, "Headphone\n");
+	}
+
+	return -EINVAL;
+}
+
+static ssize_t show_btn_state(struct device *dev,struct device_attribute *attr, char *buf)
+{
+	unsigned char btn_state;
+	btn_state = atomic_read(&fih_hs->btn_state);
+	return sprintf(buf, "%u\n", btn_state);
+}
+static DEVICE_ATTR(btn_state, S_IRUGO, show_btn_state, NULL);
+#endif
 
 enum wcd_mbhc_cs_mb_en_flag {
 	WCD_MBHC_EN_CS = 0,
@@ -119,7 +187,11 @@ static void wcd_program_hs_vref(struct wcd_mbhc *mbhc)
 
 	plug_type_cfg = WCD_MBHC_CAL_PLUG_TYPE_PTR(mbhc->mbhc_cfg->calibration);
 	reg_val = ((plug_type_cfg->v_hs_max - HS_VREF_MIN_VAL) / 100);
-
+#ifdef CONFIG_FIH_PROJECT_E2M
+	// Add start Support High-impedance headset qiujie 2018.0314
+	reg_val = reg_val + 0x01;
+	// Add end Support High-impedance headset qiujie 2018.0314
+#endif
 	dev_dbg(codec->dev, "%s: reg_val  = %x\n", __func__, reg_val);
 	WCD_MBHC_REG_UPDATE_BITS(WCD_MBHC_HS_VREF, reg_val);
 }
@@ -366,6 +438,19 @@ out_micb_en:
 		if (mbhc->hph_status & SND_JACK_OC_HPHR)
 			hphrocp_off_report(mbhc, SND_JACK_OC_HPHR);
 		clear_bit(WCD_MBHC_EVENT_PA_HPHR, &mbhc->event_state);
+#ifndef CONFIG_FIH_PROJECT_E2M
+		/* MM-ChrisYKLu-MBHC-00+{ */
+		/* When speaker is connected to HPHR, MBHC should not use HPHR PA on/off to
+		determine if headset is using or not. So do not control micbias here*/
+		/* check if micbias is enabled */
+		//if (micbias2)
+			/* Disable cs, pullup & enable micbias */
+			//wcd_enable_curr_micbias(mbhc, WCD_MBHC_EN_MB);
+		//else
+			/* Disable micbias, pullup & enable cs */
+			//wcd_enable_curr_micbias(mbhc, WCD_MBHC_EN_CS);
+		/* MM-ChrisYKLu-MBHC-00+} */
+#else
 		/* check if micbias is enabled */
 		if (micbias2)
 			/* Disable cs, pullup & enable micbias */
@@ -373,6 +458,7 @@ out_micb_en:
 		else
 			/* Disable micbias, pullup & enable cs */
 			wcd_enable_curr_micbias(mbhc, WCD_MBHC_EN_CS);
+#endif
 		mutex_unlock(&mbhc->hphr_pa_lock);
 		break;
 	case WCD_EVENT_PRE_HPHL_PA_ON:
@@ -386,6 +472,20 @@ out_micb_en:
 			wcd_enable_curr_micbias(mbhc, WCD_MBHC_EN_PULLUP);
 		break;
 	case WCD_EVENT_PRE_HPHR_PA_ON:
+#ifndef CONFIG_FIH_PROJECT_E2M
+		/* MM-ChrisYKLu-MBHC-00+{ */
+		/* When speaker is connected to HPHR, MBHC should not use HPHR PA on/off to
+		determine if headset is using or not. So do not control micbias here*/
+		//set_bit(WCD_MBHC_EVENT_PA_HPHR, &mbhc->event_state);
+		/* check if micbias is enabled */
+		//if (micbias2)
+			/* Disable cs, pullup & enable micbias */
+			//wcd_enable_curr_micbias(mbhc, WCD_MBHC_EN_MB);
+		//else
+			/* Disable micbias, enable pullup & cs */
+			//wcd_enable_curr_micbias(mbhc, WCD_MBHC_EN_PULLUP);
+		/* MM-ChrisYKLu-MBHC-00+} */
+#else
 		set_bit(WCD_MBHC_EVENT_PA_HPHR, &mbhc->event_state);
 		/* check if micbias is enabled */
 		if (micbias2)
@@ -394,6 +494,7 @@ out_micb_en:
 		else
 			/* Disable micbias, enable pullup & cs */
 			wcd_enable_curr_micbias(mbhc, WCD_MBHC_EN_PULLUP);
+#endif
 		break;
 	default:
 		break;
@@ -493,20 +594,55 @@ static bool wcd_mbhc_is_hph_pa_on(struct wcd_mbhc *mbhc)
 static void wcd_mbhc_set_and_turnoff_hph_padac(struct wcd_mbhc *mbhc)
 {
 	u8 wg_time;
-
+#ifndef CONFIG_FIH_PROJECT_E2M
+	bool hphl_pa_on, hphr_pa_on;
+#endif
 	WCD_MBHC_REG_READ(WCD_MBHC_HPH_CNP_WG_TIME, wg_time);
 	wg_time += 1;
 
 	/* If headphone PA is on, check if userspace receives
 	* removal event to sync-up PA's state */
 	if (wcd_mbhc_is_hph_pa_on(mbhc)) {
+#ifndef CONFIG_FIH_PROJECT_E2M
+		/* MM-ChrisYKLu-MBHC-00+{ */
+		WCD_MBHC_REG_READ(WCD_MBHC_HPHL_PA_EN, hphl_pa_on);
+		WCD_MBHC_REG_READ(WCD_MBHC_HPHR_PA_EN, hphr_pa_on);
+		if(hphl_pa_on )
+		{
+			pr_debug("%s L PA is on, setting L PA_OFF_ACK\n", __func__);
+			set_bit(WCD_MBHC_HPHL_PA_OFF_ACK, &mbhc->hph_pa_dac_state);
+		}
+		if(hphr_pa_on && !current_ext_spk_pa_state)
+		{
+			pr_debug("%s R PA is on, setting R PA_OFF_ACK\n", __func__);
+			set_bit(WCD_MBHC_HPHR_PA_OFF_ACK, &mbhc->hph_pa_dac_state);
+		}
+		/*
+
 		pr_debug("%s PA is on, setting PA_OFF_ACK\n", __func__);
 		set_bit(WCD_MBHC_HPHL_PA_OFF_ACK, &mbhc->hph_pa_dac_state);
 		set_bit(WCD_MBHC_HPHR_PA_OFF_ACK, &mbhc->hph_pa_dac_state);
+		*/
+		/* MM-ChrisYKLu-MBHC-00+} */
+#else
+		pr_debug("%s PA is on, setting PA_OFF_ACK\n", __func__);
+		set_bit(WCD_MBHC_HPHL_PA_OFF_ACK, &mbhc->hph_pa_dac_state);
+		set_bit(WCD_MBHC_HPHR_PA_OFF_ACK, &mbhc->hph_pa_dac_state);
+#endif
 	} else {
 		pr_debug("%s PA is off\n", __func__);
 	}
+#ifndef CONFIG_FIH_PROJECT_E2M
+	/* MM-ChrisYKLu-MBHC-00+{ */
+	/* Do not turn off HRH_R PA when speaker is enable */
+	if(!current_ext_spk_pa_state)
 	WCD_MBHC_REG_UPDATE_BITS(WCD_MBHC_HPH_PA_EN, 0);
+	else
+		WCD_MBHC_REG_UPDATE_BITS(WCD_MBHC_HPHL_PA_EN, 0);
+	/* MM-ChrisYKLu-MBHC-00+} */
+#else
+	WCD_MBHC_REG_UPDATE_BITS(WCD_MBHC_HPH_PA_EN, 0);
+#endif
 	usleep_range(wg_time * 1000, wg_time * 1000 + 50);
 }
 
@@ -717,6 +853,19 @@ static void wcd_mbhc_report_plug(struct wcd_mbhc *mbhc, int insertion,
 				    WCD_MBHC_JACK_MASK);
 		wcd_mbhc_clr_and_turnon_hph_padac(mbhc);
 	}
+
+//ChrisYKLu add for FTM
+#ifdef LEGACY_SWITCH_DEV_SUPPORT
+		if(!mbhc->mbhc_cfg->fih_hs_support && fih_hs)
+		{
+			switch_set_state(&fih_hs->sdev, mbhc->current_plug);
+			pr_info("%s: switch_set_state %d\n", __func__, mbhc->current_plug);
+		}
+#endif
+	//fih FTM headset and btn detect-S
+	atomic_set(&fih_plug_type, mbhc->current_plug);
+	//fih FTM headset and btn detect-E
+
 	pr_debug("%s: leave hph_status %x\n", __func__, mbhc->hph_status);
 }
 
@@ -1181,7 +1330,14 @@ static void wcd_correct_swch_plug(struct work_struct *work)
 	wcd_enable_curr_micbias(mbhc, WCD_MBHC_EN_MB);
 
 
-	/* Enable HW FSM */
+#ifdef CONFIG_FIH_PROJECT_E2M
+	/* Reset HW FSM */
+	/* From E2M HW design, play using speaker will enable HPH PA.
+	 * And HPH PA enabled will change HW FSM status, and it will
+	 * cause headset detect wrong when play.
+	 */
+	WCD_MBHC_REG_UPDATE_BITS(WCD_MBHC_FSM_EN, 0);
+#endif
 	WCD_MBHC_REG_UPDATE_BITS(WCD_MBHC_FSM_EN, 1);
 	/*
 	 * Check for any button press interrupts before starting 3-sec
@@ -1421,6 +1577,33 @@ report:
 		wcd_cancel_btn_work(mbhc);
 		plug_type = MBHC_PLUG_TYPE_HEADPHONE;
 	}
+#ifdef CONFIG_FIH_PROJECT_E2M
+#define FIH_FEATURE_ENABLE_SELFIE_STICK
+#endif
+#ifdef FIH_FEATURE_ENABLE_SELFIE_STICK
+    if (plug_type == MBHC_PLUG_TYPE_GND_MIC_SWAP) {
+		/*
+		 * calculate impedance detection
+		 * If Zl and Zr > 20k then it is special accessory
+		 * otherwise unsupported cable.
+		 */
+		if (mbhc->impedance_detect) {
+			if (mbhc->mbhc_cb->compute_impedance)
+				mbhc->mbhc_cb->compute_impedance(mbhc, &mbhc->zl, &mbhc->zr);
+			if (mbhc->mbhc_cb->compute_impedance &&
+					(mbhc->zl > 20000) && (mbhc->zr > 20000)) {
+				pr_debug("%s: special accessory \n", __func__);
+				/* Toggle switch back */
+				if (mbhc->mbhc_cfg->swap_gnd_mic &&
+						mbhc->mbhc_cfg->swap_gnd_mic(mbhc->codec)) {
+					pr_debug("%s: US_EU gpio present,flip switch again\n"
+							, __func__);
+				}
+				plug_type = MBHC_PLUG_TYPE_HEADSET;
+			}
+		}
+	}
+#endif /* FIH_FEATURE_ENABLE_SELFIE_STICK */
 	pr_debug("%s: Valid plug found, plug type %d wrk_cmpt %d btn_intr %d\n",
 			__func__, plug_type, wrk_complete,
 			mbhc->btn_press_intr);
@@ -1809,6 +1992,8 @@ static irqreturn_t wcd_mbhc_hs_rem_irq(int irq, void *data)
 	WCD_MBHC_REG_READ(WCD_MBHC_MIC_SCHMT_RESULT, mic_sch);
 	WCD_MBHC_REG_READ(WCD_MBHC_HS_COMP_RESULT, hs_comp_result);
 
+	pr_debug("%s: hphl_sch(%d)  mic_sch(%d)  hs_comp_result(%d) \n", __func__,hphl_sch, mic_sch, hs_comp_result);
+
 	if (removed) {
 		if (!(hphl_sch && mic_sch && hs_comp_result)) {
 			/*
@@ -1898,6 +2083,18 @@ static void wcd_btn_lpress_fn(struct work_struct *work)
 		wcd_mbhc_jack_report(mbhc, &mbhc->button_jack,
 				mbhc->buttons_pressed, mbhc->buttons_pressed);
 	}
+//ChrisYKLu add for FTM
+#ifdef LEGACY_SWITCH_DEV_SUPPORT
+		if(!mbhc->mbhc_cfg->fih_hs_support && fih_hs)
+		{
+			atomic_set(&fih_hs->btn_state, 1); 
+			pr_info("%s: switch_set_btn_state lpress(%d)\n", __func__, btn_result);
+		}
+#endif
+    //fih FTM headset and btn detect-S
+    atomic_set(&fih_btn_state, 1);
+    //fih FTM headset and btn detect-E
+
 	pr_debug("%s: leave\n", __func__);
 	mbhc->mbhc_cb->lock_sleep(mbhc, false);
 }
@@ -2013,6 +2210,18 @@ static irqreturn_t wcd_mbhc_release_handler(int irq, void *data)
 				 __func__);
 			wcd_mbhc_jack_report(mbhc, &mbhc->button_jack,
 					0, mbhc->buttons_pressed);
+//ChrisYKLu add for FTM
+#ifdef LEGACY_SWITCH_DEV_SUPPORT
+			if(!mbhc->mbhc_cfg->fih_hs_support && fih_hs)
+			{
+				atomic_set(&fih_hs->btn_state, 0); 
+				pr_info("%s: switch_set_btn_state release\n", __func__);
+			}
+#endif
+        //fih FTM headset and btn detect-S
+        atomic_set(&fih_btn_state, 0);
+        //fih FTM headset and btn detect-E
+
 		} else {
 			if (mbhc->in_swch_irq_handler) {
 				pr_debug("%s: Switch irq kicked in, ignore\n",
@@ -2024,11 +2233,36 @@ static irqreturn_t wcd_mbhc_release_handler(int irq, void *data)
 						     &mbhc->button_jack,
 						     mbhc->buttons_pressed,
 						     mbhc->buttons_pressed);
+//ChrisYKLu add for FTM
+#ifdef LEGACY_SWITCH_DEV_SUPPORT
+				if(!mbhc->mbhc_cfg->fih_hs_support && fih_hs)
+				{
+					atomic_set(&fih_hs->btn_state, 1); 
+					pr_info("%s: switch_set_btn_state press(0x%x)\n", __func__, mbhc->buttons_pressed);
+				}
+#endif
+				//fih FTM headset and btn detect-S
+				atomic_set(&fih_btn_state, 1);
+				//fih FTM headset and btn detect-E
+
 				pr_debug("%s: Reporting btn release\n",
 					 __func__);
 				wcd_mbhc_jack_report(mbhc,
 						&mbhc->button_jack,
 						0, mbhc->buttons_pressed);
+//ChrisYKLu add for FTM
+#ifdef LEGACY_SWITCH_DEV_SUPPORT
+				if(!mbhc->mbhc_cfg->fih_hs_support && fih_hs)
+				{
+					atomic_set(&fih_hs->btn_state, 0); 
+					pr_info("%s: switch_set_btn_state release\n", __func__);
+				}
+#endif
+            //fih FTM headset and btn detect-S
+            atomic_set(&fih_btn_state, 0);
+            //fih FTM headset and btn detect-E
+
+
 			}
 		}
 		mbhc->buttons_pressed &= ~WCD_MBHC_JACK_BUTTON_MASK;
@@ -2130,11 +2364,19 @@ static int wcd_mbhc_initialise(struct wcd_mbhc *mbhc)
 	WCD_MBHC_REG_UPDATE_BITS(WCD_MBHC_HS_L_DET_PULL_UP_COMP_CTRL, 1);
 	WCD_MBHC_REG_UPDATE_BITS(WCD_MBHC_L_DET_EN, 1);
 
+#ifndef CONFIG_FIH_PROJECT_E2M
+        /* Insertion debounce set to 96ms */
+       WCD_MBHC_REG_UPDATE_BITS(WCD_MBHC_INSREM_DBNC, 9); // add to 256ms
+        /* Button Debounce set to 16ms */
+       WCD_MBHC_REG_UPDATE_BITS(WCD_MBHC_BTN_DBNC, 3); // add to 32ms
+
+#else
 	/* Insertion debounce set to 96ms */
 	WCD_MBHC_REG_UPDATE_BITS(WCD_MBHC_INSREM_DBNC, 6);
 	/* Button Debounce set to 16ms */
 	WCD_MBHC_REG_UPDATE_BITS(WCD_MBHC_BTN_DBNC, 2);
 
+#endif
 	/* Enable micbias ramp */
 	if (mbhc->mbhc_cb->mbhc_micb_ramp_control)
 		mbhc->mbhc_cb->mbhc_micb_ramp_control(codec, true);
@@ -2325,6 +2567,46 @@ int wcd_mbhc_start(struct wcd_mbhc *mbhc,
 			pr_err("%s: Skipping to read mbhc fw, 0x%pK %pK\n",
 				 __func__, mbhc->mbhc_fw, mbhc->mbhc_cal);
 	}
+    	//fih FTM headset and btn detect-S
+    atomic_set(&fih_btn_state, 0);
+	atomic_set(&fih_plug_type, 0);
+	//fih FTM headset and btn detect-E
+//ChrisYKLu add for FTM
+#ifdef LEGACY_SWITCH_DEV_SUPPORT
+	if(!mbhc->mbhc_cfg->fih_hs_support)
+	{
+		int ret;
+		if (!fih_hs){
+			pr_info("%s: kzalloc fih_hs\n", __func__);
+			fih_hs = kzalloc(sizeof(struct h2w_info), GFP_KERNEL);
+			if (!fih_hs)
+				return -ENOMEM;
+			// /sys/class/switch/h2w/state to be updated.
+			// /sys/class/switch/h2w/btn_state to be updated.
+			atomic_set(&fih_hs->btn_state, 0);
+			atomic_set(&fih_hs->hs_state, 0);
+			fih_hs->sdev.name = "h2w";
+			fih_hs->sdev.print_name = trout_h2w_print_name;
+			ret = switch_dev_register(&fih_hs->sdev);
+			if (!ret){
+				ret = device_create_file(fih_hs->sdev.dev,&dev_attr_btn_state);
+				if(ret)
+				{
+					pr_err("%s: device_create_file btn_state fail %d!\n", __func__, ret);
+					switch_dev_unregister(&fih_hs->sdev);
+					kzfree(fih_hs);
+				}
+			}
+			else	{
+				pr_err("%s: switch_dev_register (%s) fail %d\n", __func__, fih_hs->sdev.name, ret);
+				kzfree(fih_hs);
+			}
+		}
+		else	{
+			pr_err("%s: fih_hs already exist with name(%s)\n", __func__, fih_hs->sdev.name);
+		}
+	}
+#endif
 	pr_debug("%s: leave %d\n", __func__, rc);
 	return rc;
 }

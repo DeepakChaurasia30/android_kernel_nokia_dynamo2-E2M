@@ -15,6 +15,9 @@
 #include <linux/wait.h>
 #include <linux/stringify.h>
 #include "wcdcal-hwdep.h"
+//fih FTM headset and btn detect-S
+#include <asm/atomic.h>
+//fih FTM headset and btn detect-E
 
 #define TOMBAK_MBHC_NC	0
 #define TOMBAK_MBHC_NO	1
@@ -249,6 +252,8 @@ struct wcd_mbhc_config {
 	bool mono_stero_detection;
 	bool (*swap_gnd_mic)(struct snd_soc_codec *codec);
 	bool hs_ext_micbias;
+        //ChrisYKLu add for FTM
+        bool fih_hs_support;
 	bool gnd_det_en;
 	int key_code[WCD_MBHC_KEYCODE_NUM];
 	uint32_t linein_th;
@@ -525,5 +530,9 @@ static inline void wcd_mbhc_deinit(struct wcd_mbhc *mbhc)
 {
 }
 #endif
+//fih FTM headset and btn detect-S
+int get_plug_type(void);
+int get_btn_state(void);
+//fih FTM headset and btn detect-E
 
 #endif /* __WCD_MBHC_V2_H__ */
