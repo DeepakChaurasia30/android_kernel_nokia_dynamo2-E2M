@@ -1156,6 +1156,10 @@ static void mmc_sd_detect(struct mmc_host *host)
 	BUG_ON(!host);
 	BUG_ON(!host->card);
 
+//[MS3O-588]:It becomes black screen and it can not be recovered
+#if 1
+	mmc_get_card(host->card);
+#else
 	/*
 	 * Try to acquire claim host. If failed to get the lock in 2 sec,
 	 * just return; This is to ensure that when this call is invoked
@@ -1171,8 +1175,9 @@ static void mmc_sd_detect(struct mmc_host *host)
 	if (mmc_bus_needs_resume(host))
 		mmc_resume_bus(host);
 #endif
-	mmc_power_up(host, host->ocr_avail);
 
+	mmc_power_up(host, host->ocr_avail);
+#endif
 	/*
 	 * Just check if our card has been removed.
 	 */
@@ -1510,6 +1515,7 @@ err:
 
 	pr_err("%s: error %d whilst initialising SD card\n",
 		mmc_hostname(host), err);
+	printk ("BBox::UEC; 43::3\n");
 
 	return err;
 }
