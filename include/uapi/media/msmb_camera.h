@@ -114,7 +114,11 @@
 #define MSM_CAMERA_ERR_CMD_FAIL		(MSM_CAMERA_ERR_EVT_BASE + 1)
 #define MSM_CAMERA_ERR_MAPPING		(MSM_CAMERA_ERR_EVT_BASE + 2)
 #define MSM_CAMERA_ERR_DEVICE_BUSY	(MSM_CAMERA_ERR_EVT_BASE + 3)
-
+/*MM-JW-MainCamPorting-11 +{*/
+/* ChunJeng add for 3a information to exif Start 20150414 */
+#define PROPERTY_VALUE_MAX_3A 92
+/* ChunJeng add for 3a information to exif End 20150414 */
+/*MM-JW-MainCamPorting-11 +}*/
 /* The msm_v4l2_event_data structure should match the
  * v4l2_event.u.data field.
  * should not exceed 16 elements */
