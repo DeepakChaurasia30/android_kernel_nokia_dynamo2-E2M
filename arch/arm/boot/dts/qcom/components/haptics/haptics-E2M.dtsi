@@ -1,0 +1,5 @@
+&pmi_haptic {
+	qcom,actuator-type = "erm";
+	qcom,vmax-mv = <3000>;
+	qcom,ilim-ma = <90>;
+};

@@ -1,0 +1,70 @@
+/* Copyright (c) 2014-2015, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+qcom,fih-ms3-4v4-2650mah-100k {
+	qcom,nom-batt-capacity-mah = <2630>;
+	qcom,max-voltage-uv = <4400000>;
+	qcom,v-cutoff-uv = <3400000>;
+	qcom,chg-term-ua = <50000>;
+	qcom,batt-id-kohm = <100>;
+	qcom,battery-beta = <3435>;
+	qcom,battery-type = "MSM8937_MS3_100";
+	qcom,cool-bat-decidegc = <150>;
+	qcom,hot-bat-decidegc = <550>;
+	qcom,fg-chg-iterm-ma = <50>;
+	qcom,chg-rslow-comp-c1 = <3129174>;
+	qcom,chg-rslow-comp-c2 = <4264160>;
+	qcom,chg-rs-to-rslow = <1010720>;
+	qcom,chg-rslow-comp-thr = <0xA2>;
+	qcom,fastchg-current-ma = <1800>;
+	qcom,fastchg-current-comp = <700>;
+	qcom,fg-cc-cv-threshold-mv = <4390>;
+	qcom,checksum = <0xCE24>;
+	qcom,thermal-coefficients = [C5 86 BE 50 D1 37];
+	qcom,gui-version = "PMI8950GUI - 2.0.0.16";
+	fih,log-info = <1>;
+	fih,turn-on-QC-log = <1>;
+	qcom,fg-profile-data = [
+		 F3 83 91 7D
+		 C0 81 4F 7C
+		 56 83 FF 5C
+		 8A 81 5E 8C
+		 15 82 A1 99
+		 2F BC 36 C8
+		 5D 0F 06 88
+		 FE 7D FA 81
+		 7A 7C 51 83
+		 85 6B 29 73
+		 5F 85 44 82
+		 C6 99 F6 BC
+		 C8 C9 59 0D
+		 DD 0A 28 60
+		 14 70 B8 FE
+		 55 28 CE 45
+		 AF 31 00 00
+		 27 4D C2 21
+		 0B 48 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 B6 70 FB 6A
+		 C9 7C E0 88
+		 5D 7C 3B 71
+		 A1 6C AB 81
+		 15 76 B7 6A
+		 40 6F C7 A8
+		 20 AD 60 B1
+		 5F A0 71 0C
+		 28 00 FF 36
+		 F0 11 30 03
+		 00 00 00 0C
+	];
+};

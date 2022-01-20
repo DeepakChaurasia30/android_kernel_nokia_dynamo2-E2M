@@ -1,0 +1,70 @@
+/* Copyright (c) 2014-2015, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+qcom,fih-vz1-4000mah-100k {
+	qcom,max-voltage-uv = <4400000>;
+	qcom,nom-batt-capacity-mah = <4000>;
+	qcom,batt-id-kohm = <100>;
+	qcom,v-cutoff-uv = <3400000>;
+	qcom,chg-term-ua = <80000>;
+	qcom,battery-type = "fih-vz1-4000mah-100k";
+	qcom,warm-bat-decidegc = <450>;
+	qcom,cool-bat-decidegc = <100>;
+	qcom,hot-bat-decidegc = <600>;
+	qcom,cold-bat-decidegc = <0>;
+	qcom,fastchg-current-ma = <2000>;
+	qcom,fastchg-current-comp = <1200>;
+	qcom,float-voltage-comp = <11>; /* 4.4 -[(11 -1) * 0.02] = 4.2V */
+	qcom,fg-cc-cv-threshold-mv = <4390>;
+	qcom,thermal-coefficients = [C5 86 BE 50 D1 37];
+	qcom,battery-beta = <3435>;
+	qcom,chg-rslow-comp-c1 = <3360081>;
+	qcom,chg-rslow-comp-c2 = <5696162>;
+	qcom,chg-rs-to-rslow = <688430>;
+	qcom,chg-rslow-comp-thr = <0xB4>;
+	qcom,checksum = <0x194C>;
+	qcom,gui-version = "PMI8950GUI - 2.0.0.16";
+	qcom,fg-profile-data = [
+		 F5 83 A5 7D 
+		 CE 81 5C 7C 
+		 61 83 31 6E 
+		 27 88 4C 8E 
+		 22 82 9F 99 
+		 52 BC 7F C8 
+		 5C 10 01 88 
+		 AE 7D CE 81 
+		 5F 7C 5A 83 
+		 64 59 4F 82 
+		 94 8E 6D 82 
+		 86 98 0D B7 
+		 61 C3 52 15 
+		 DC 0F E4 5A 
+		 14 70 71 FD 
+		 CF 3C 8B 45 
+		 27 40 00 00 
+		 17 47 03 33 
+		 5F 38 00 00 
+		 00 00 00 00 
+		 00 00 00 00 
+		 6B 6A 99 69 
+		 69 69 CF 89 
+		 EE 76 13 70 
+		 FD 60 FC 81 
+		 9E 75 27 6A 
+		 EE 7C 28 A3 
+		 20 7C 60 B9 
+		 5C A0 71 0C 
+		 28 00 FF 36 
+		 F0 11 30 03 
+		 00 00 00 0C 
+	];
+};

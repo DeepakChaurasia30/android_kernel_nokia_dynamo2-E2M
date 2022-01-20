@@ -497,7 +497,7 @@
 			qcom,en-ext-pfet-sc-pro;
 			qcom,cons-sync-write-delay-us = <1000>;
 		};
-
+//misty E2MP camera porting++
 		flash_led: qcom,leds@d300 {
 			compatible = "qcom,qpnp-flash-led";
 			status = "okay";
@@ -527,9 +527,9 @@
 				qcom,default-led-trigger =
 						"flash0_trigger";
 				qcom,max-current = <1000>;
-				qcom,duration = <1280>;
+				qcom,duration = <400>;
 				qcom,id = <0>;
-				qcom,current = <625>;
+				qcom,current = <1000>;
 			};
 
 			pmi8940_flash1: qcom,flash_1 {
@@ -538,9 +538,9 @@
 				qcom,default-led-trigger =
 						"flash1_trigger";
 				qcom,max-current = <1000>;
-				qcom,duration = <1280>;
+				qcom,duration = <400>;
 				qcom,id = <1>;
-				qcom,current = <625>;
+				qcom,current = <1000>;
 			};
 
 			pmi8940_torch0: qcom,torch_0 {
@@ -550,7 +550,7 @@
 						"torch0_trigger";
 				qcom,max-current = <200>;
 				qcom,id = <0>;
-				qcom,current = <120>;
+				qcom,current = <100>;
 			};
 
 			pmi8940_torch1: qcom,torch_1 {
@@ -560,7 +560,7 @@
 						"torch1_trigger";
 				qcom,max-current = <200>;
 				qcom,id = <1>;
-				qcom,current = <120>;
+				qcom,current = <100>;
 			};
 
 			pmi8940_switch: qcom,switch {
@@ -569,15 +569,15 @@
 				qcom,default-led-trigger =
 						"switch_trigger";
 				qcom,max-current = <1000>;
-				qcom,duration = <1280>;
+				qcom,duration = <400>;
 				qcom,id = <2>;
-				qcom,current = <625>;
+				qcom,current = <1000>;
 				reg0 {
 					regulator-name = "pon_spare_reg";
 				};
 			};
 		};
-
+//misty E2MP camera porting--
 		pmi_haptic: qcom,haptic@c000 {
 			compatible = "qcom,qpnp-haptic";
 			reg = <0xc000 0x100>;

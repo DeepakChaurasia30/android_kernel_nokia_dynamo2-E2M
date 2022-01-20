@@ -1,0 +1,77 @@
+
+#include "msm8937-mdss-panels.dtsi"
+
+&mdss_mdp {
+	qcom,mdss-pref-prim-intf = "dsi";
+};
+
+&mdss_dsi {
+	hw-config = "single_dsi";
+};
+
+&mdss_dsi0 {
+	qcom,dsi-pref-prim-pan = <&dsi_otm1290a_720p_video_hlt_mp>;
+	pinctrl-names = "mdss_default", "mdss_sleep";
+	pinctrl-0 = <&mdss_dsi_active &mdss_te_active>;
+	pinctrl-1 = <&mdss_dsi_suspend &mdss_te_suspend>;
+
+	qcom,platform-te-gpio = <&tlmm 24 0>;
+	qcom,platform-reset-gpio = <&tlmm 60 0>;
+	qcom,platform-bklight-en-gpio = <&tlmm 98 0>;
+};
+
+&dsi_otm1290a_720p_video {
+	qcom,panel-supply-entries = <&dsi_panel_pwr_e2m_supply>;
+};
+
+&dsi_otm1290a_720p_video_hlt_evt {
+	qcom,panel-supply-entries = <&dsi_panel_pwr_e2m_supply>;
+};
+
+&dsi_otm1290a_720p_video_hlt_evt2 {
+	qcom,panel-supply-entries = <&dsi_panel_pwr_e2m_supply>;
+};
+
+&dsi_otm1290a_720p_video_hlt_dvt {
+	qcom,panel-supply-entries = <&dsi_panel_pwr_e2m_supply>;
+};
+
+&dsi_otm1290a_720p_video_hlt_mp {
+	qcom,panel-supply-entries = <&dsi_panel_pwr_e2m_supply>;
+};
+
+&dsi_otm1290a_720p_video_txd_evt2 {
+	qcom,panel-supply-entries = <&dsi_panel_pwr_e2m_supply>;
+};
+
+&dsi_otm1290a_720p_video_txd_dvt {
+	qcom,panel-supply-entries = <&dsi_panel_pwr_e2m_supply>;
+};
+
+&dsi_otm1290a_720p_video_txd_mp {
+	qcom,panel-supply-entries = <&dsi_panel_pwr_e2m_supply>;
+};
+
+&dsi_ili9881c_720p_video_hlt_es {
+	qcom,panel-supply-entries = <&dsi_panel_pwr_e2m_supply>;
+};
+
+&dsi_ili9881c_720p_video_hlt_cs {
+	qcom,panel-supply-entries = <&dsi_panel_pwr_e2m_supply>;
+};
+
+&dsi_ili9881c_720p_video_hlt_mp {
+	qcom,panel-supply-entries = <&dsi_panel_pwr_e2m_supply>;
+};
+
+&dsi_ili9881c_720p_video_inno_es {
+	qcom,panel-supply-entries = <&dsi_panel_pwr_e2m_supply>;
+};
+
+&dsi_ili9881c_720p_video_inno_cs {
+	qcom,panel-supply-entries = <&dsi_panel_pwr_e2m_supply>;
+};
+
+&dsi_ili9881c_720p_video_inno_mp {
+	qcom,panel-supply-entries = <&dsi_panel_pwr_e2m_supply>;
+};

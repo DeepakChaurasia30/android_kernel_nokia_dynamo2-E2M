@@ -35,7 +35,7 @@
 				"resin-bark", "kpdpwr-resin-bark";
 			qcom,pon-dbc-delay = <15625>;
 			qcom,system-reset;
-			qcom,store-hard-reset-reason;
+			//qcom,store-hard-reset-reason;
 
 			qcom,pon_1 {
 				qcom,pon-type = <0>;
@@ -269,7 +269,7 @@
 				qcom,pre-div-channel-scaling = <0>;
 				qcom,calibration-type = "ratiometric";
 				qcom,scale-function = <2>;
-				qcom,hw-settle-time = <2>;
+				qcom,hw-settle-time = <0xf>;
 				qcom,fast-avg-setup = <0>;
 			};
 
@@ -280,7 +280,7 @@
 				qcom,pre-div-channel-scaling = <0>;
 				qcom,calibration-type = "ratiometric";
 				qcom,scale-function = <2>;
-				qcom,hw-settle-time = <2>;
+				qcom,hw-settle-time = <0xf>;
 				qcom,fast-avg-setup = <0>;
 				qcom,vadc-thermal-node;
 			};
@@ -316,7 +316,7 @@
 				qcom,pre-div-channel-scaling = <0>;
 				qcom,calibration-type = "ratiometric";
 				qcom,scale-function = <2>;
-				qcom,hw-settle-time = <2>;
+				qcom,hw-settle-time = <0xf>;
 				qcom,fast-avg-setup = <0>;
 				qcom,vadc-thermal-node;
 			};

@@ -1,0 +1,296 @@
+/*
+ * Copyright (c) 2015-2016, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+#include "msm8917-pinctrl-VZ1.dtsi"
+#include "msm8917-camera-sensor-mtp.dtsi"
+
+/* Reserved memory hole */
+#include "components/memmap/memmap_8917_v0.dtsi"
+
+/* Pstore:last kmsg */
+#include "components/memmap/msm8917-memory-pstore.dtsi"
+
+&i2c_2 { /* BLSP1 QUP2 */
+	status="okay";
+	aw2013@45 {
+		compatible = "awinic,aw2013";
+		reg = <0x45>;
+		vdd-supply = <&pm8917_l10>;
+		vcc-supply = <&pm8917_l6>;
+
+		aw2013,red {
+			aw2013,name = "led-r";
+			aw2013,id = <0>;
+			aw2013,max-brightness = <18>;
+			aw2013,max-current = <1>;
+			aw2013,rise-time-ms = <0>;
+			aw2013,hold-time-ms = <2>;
+			aw2013,fall-time-ms = <0>;
+			aw2013,off-time-ms = <5>;
+			linux,default-trigger =	"none";
+		};
+
+		aw2013,green {
+			aw2013,name = "led-g";
+			aw2013,id = <1>;
+			aw2013,max-brightness = <15>;
+			aw2013,max-current = <1>;
+			aw2013,rise-time-ms = <0>;
+			aw2013,hold-time-ms = <2>;
+			aw2013,fall-time-ms = <0>;
+			aw2013,off-time-ms = <5>;
+			linux,default-trigger = "none";
+		};
+
+		aw2013,blue {
+			aw2013,name = "led-b";
+			aw2013,id = <2>;
+			aw2013,max-brightness = <100>;
+			aw2013,max-current = <1>;
+			aw2013,rise-time-ms = <0>;
+			aw2013,hold-time-ms = <2>;
+			aw2013,fall-time-ms = <0>;
+			aw2013,off-time-ms = <5>;
+			linux,default-trigger = "none";
+		};
+	};
+};
+
+
+&soc {
+
+	gpio_keys {
+		compatible = "gpio-keys";
+		input-name = "gpio-keys";
+		pinctrl-names = "tlmm_gpio_key_active","tlmm_gpio_key_suspend";
+		pinctrl-0 = <&gpio_key_active>;
+		pinctrl-1 = <&gpio_key_suspend>;
+
+		vol_down {
+			label = "volume_down";
+			gpios = <&tlmm 91 0x1>;
+			linux,input-type = <1>;
+			linux,code = <114>;
+			debounce-interval = <15>;
+		};
+	};
+
+	hbtp {
+		compatible = "qcom,hbtp-input";
+		vcc_ana-supply = <&pm8917_l10>;
+		vcc_dig-supply = <&pm8917_l5>;
+		qcom,afe-load = <50000>;
+		qcom,afe-vtg-min = <2850000>;
+		qcom,afe-vtg-max = <2850000>;
+		qcom,dig-load = <15000>;
+		qcom,dig-vtg-min = <1800000>;
+		qcom,dig-vtg-max = <1800000>;
+	};
+
+        i2c@78b7000 {
+          status = "ok";
+          #include "components/touch/touch_focal_8917_v0.dtsi"
+        };
+
+	/*Porting IRDA driver*/
+	irda: maxq656 {
+        compatible = "maxim,maxq656";
+		maxim,ir-pwn-gpio = <&tlmm 61 0x00>;
+        pinctrl-names = "irda_active","irda_suspend";
+        pinctrl-0 = <&irda_dsi_active>;
+        pinctrl-1 = <&irda_dsi_suspend>;
+	};
+	/*Porting IRDA driver*/
+};
+
+&spmi_bus {
+  qcom,pm8937@0 {
+		qcom,power-on@800 {
+			compatible = "qcom,qpnp-power-on";
+			reg = <0x800 0x100>;
+			interrupts = <0x0 0x8 0x0>,
+				<0x0 0x8 0x1>,
+				<0x0 0x8 0x4>,
+				<0x0 0x8 0x5>;
+			interrupt-names = "kpdpwr", "resin",
+				"resin-bark", "kpdpwr-resin-bark";
+			qcom,pon-dbc-delay = <15625>;
+			qcom,system-reset;
+			qcom,s3-debounce = <128>;
+			qcom,s3-src = "kpdpwr-and-resin";
+
+			/* PON: KPDPWR */
+			qcom,pon_1 {
+				qcom,pon-type = <0>;
+				qcom,pull-up = <1>;
+				linux,code = <116>;
+				qcom,support-reset = <0>;
+			};
+
+			/* PON: RESIN */
+			qcom,pon_2 {
+				qcom,pon-type = <1>;
+				qcom,pull-up = <1>;
+				linux,code = <115>;
+				qcom,support-reset = <0>;
+			};
+
+			/* PON: KPDPWR + RESIN */
+			qcom,pon_3 {
+				qcom,pon-type = <3>;
+				qcom,support-reset = <1>;
+				/* RESET TRIGGER TIME: S1 + S2 = 8720ms */
+				qcom,s1-timer = <6720>;
+				qcom,s2-timer = <2000>;
+				/* RESET TYPE: SHUTDOWN */
+				qcom,s2-type = <4>;
+			};
+		};
+	};
+};
+
+&flash_led {
+	compatible = "qcom,qpnp-flash-led";
+	reg = <0xd300 0x100>;
+	pinctrl-names = "flash_led_enable","flash_led_disable";
+	pinctrl-0 = <&rear_flash_led_enable>;
+	pinctrl-1 = <&rear_flash_led_disable>;
+	qcom,follow-otst2-rb-disabled;
+};
+
+&wled {
+	qcom,cons-sync-write-delay-us = <1000>;
+	qcom,fs-curr-ua = <25000>;
+};
+
+/*Vibrator: FC-A2C7*/
+&pmi_haptic{
+	status = "okay";
+	qcom,wave-play-rate-us = <6000>; /*166.66 Hz*/
+	qcom,vmax-mv = <3000>;
+	qcom,actuator-type = "erm";
+};
+
+&blsp1_uart2 {
+	status = "ok";
+	pinctrl-names = "default";
+	pinctrl-0 = <&uart_console_active>;
+};
+
+/*Porting IRDA driver*/
+&blsp2_uart2 {
+	status = "ok";
+	pinctrl-names = "default";
+	pinctrl-0 = <&uart3_console_active>;
+};
+/*Porting IRDA driver*/
+
+#include "msm8937-mdss-panels.dtsi"
+
+&mdss_mdp {
+	qcom,mdss-pref-prim-intf = "dsi";
+};
+
+&mdss_dsi {
+	hw-config = "single_dsi";
+};
+
+&mdss_dsi0 {
+	qcom,dsi-pref-prim-pan = <&dsi_pj050ia_nt35521s_720p_vid>;
+	pinctrl-names = "mdss_default", "mdss_sleep";
+	pinctrl-0 = <&mdss_dsi_active &mdss_te_active>;
+	pinctrl-1 = <&mdss_dsi_suspend &mdss_te_suspend>;
+
+	qcom,platform-te-gpio = <&tlmm 24 0>;
+	qcom,platform-reset-gpio = <&tlmm 60 0>;
+};
+
+&dsi_pj050ia_nt35521s_720p_vid {
+	qcom,panel-supply-entries = <&dsi_panel_pwr_supply>;
+};
+
+&sdhc_1 {
+	/* device core power supply */
+	vdd-supply = <&pm8917_l8>;
+	qcom,vdd-voltage-level = <2900000 2900000>;
+	qcom,vdd-current-level = <200 570000>;
+
+	/* device communication power supply */
+	vdd-io-supply = <&pm8917_l5>;
+	qcom,vdd-io-always-on;
+	qcom,vdd-io-lpm-sup;
+	qcom,vdd-io-voltage-level = <1800000 1800000>;
+	qcom,vdd-io-current-level = <200 325000>;
+
+	pinctrl-names = "active", "sleep";
+	pinctrl-0 = <&sdc1_clk_on &sdc1_cmd_on &sdc1_data_on &sdc1_rclk_on>;
+	pinctrl-1 = <&sdc1_clk_off &sdc1_cmd_off &sdc1_data_off &sdc1_rclk_off>;
+
+	qcom,clk-rates = <400000 20000000 25000000 50000000 100000000 192000000
+								384000000>;
+	qcom,nonremovable;
+	qcom,bus-speed-mode = "HS400_1p8v", "HS200_1p8v", "DDR_1p8v";
+
+	status = "ok";
+};
+
+&sdhc_2 {
+	/* device core power supply */
+	vdd-supply = <&pm8917_l11>;
+	qcom,vdd-voltage-level = <2950000 2950000>;
+	qcom,vdd-current-level = <15000 800000>;
+
+	/* device communication power supply */
+	vdd-io-supply = <&pm8917_l12>;
+	qcom,vdd-io-voltage-level = <1800000 2950000>;
+	qcom,vdd-io-current-level = <200 22000>;
+
+	pinctrl-names = "active", "sleep";
+	pinctrl-0 = <&sdc2_clk_on &sdc2_cmd_on &sdc2_data_on &sdc2_cd_on>;
+	pinctrl-1 = <&sdc2_clk_off &sdc2_cmd_off &sdc2_data_off>;
+
+	#address-cells = <0>;
+	interrupt-parent = <&sdhc_2>;
+	interrupts = <0 1 2>;
+	#interrupt-cells = <1>;
+	interrupt-map-mask = <0xffffffff>;
+	interrupt-map = <0 &intc 0 125 0
+		1 &intc 0 221 0
+		2 &tlmm 67 0>;
+	interrupt-names = "hc_irq", "pwr_irq", "status_irq";
+	cd-gpios = <&tlmm 67 0>;
+
+	qcom,clk-rates = <400000 20000000 25000000 50000000 100000000
+								200000000>;
+	qcom,bus-speed-mode = "SDR12", "SDR25", "SDR50", "DDR50", "SDR104";
+
+	status = "ok";
+};
+
+/* Since we don't use PM8937 MPP_02 as PA_THERM config, so remove these define in msm-pm8937.dtsi. */
+&pm8937_mpps {
+        mpp@a100 {
+                /delete-property/ qcom,mode;
+                /delete-property/ qcom,invert;
+                /delete-property/ qcom,ain-route;
+                /delete-property/ qcom,master-en;
+                /delete-property/ qcom,src-sel;
+
+                status="disabled";
+        };
+};
+
+&pm8937_vadc {
+        /delete-node/ chan@11;
+};
+

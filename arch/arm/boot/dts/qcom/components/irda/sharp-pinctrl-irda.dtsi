@@ -1,0 +1,130 @@
+/* sharp-pinctrl-irda.dtsi (Infrared driver module)
+ *
+ * Copyright (C) 2009-2010 SHARP CORPORATION All rights reserved.
+ *
+ * This software is licensed under the terms of the GNU General Public
+ * License version 2, as published by the Free Software Foundation, and
+ * may be copied, distributed, and modified under those terms.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ */
+
+&soc {
+	tlmm: pinctrl@1000000 {
+		compatible = "qcom,msm8937-pinctrl";
+		reg = <0x1000000 0x300000>;
+		interrupts = <0 208 0>;
+		gpio-controller;
+		#gpio-cells = <2>;
+		interrupt-controller;
+		#interrupt-cells = <2>;
+
+		/****************************************/
+		/****************************************/
+pmx-uartconsole {
+			uart2_console_active: uart2_console_active {
+				mux {
+					pins = "gpio16", "gpio17";
+					function = "blsp_uart5";
+				};
+
+				config {
+					pins = "gpio16", "gpio17";
+					drive-strength = <2>;
+					bias-disable;
+				};
+			};
+
+			uart2_console_sleep: uart2_console_sleep {
+				mux {
+					pins = "gpio16", "gpio17";
+					function = "blsp_uart5";
+				};
+
+				config {
+					pins = "gpio16", "gpio17";
+					drive-strength = <2>;
+					bias-pull-down;
+				};
+			};
+};
+
+		irda_sd_active {
+			/*qcom,pins = <&gp 61>;*/
+			pins = "gpio61";
+			qcom,num-grp-pins = <1>;
+			qcom,pin-func = <0>;
+		        label = "irda_sd_active";
+			irda_sd_active: default {
+				drive-strength = <2>;
+				bias-disable;
+			};
+		};
+
+		irda_sd_sleep {
+			/*qcom,pins = <&gp 61>;*/
+			pins = "gpio61";
+			qcom,num-grp-pins = <1>;
+			qcom,pin-func = <0>;
+		        label = "irda_sd_sleep";
+			irda_sd_sleep: sleep {
+				drive-strength = <2>;
+				bias-disable;
+			};
+		};
+
+		irda_tx_active {
+			/*qcom,pins = <&gp 16>;*/
+			pins = "gpio16";
+			qcom,num-grp-pins = <1>;
+			qcom,pin-func = <2>;
+		        label = "irda_tx_active";
+			irda_tx_active: default {
+				drive-strength = <2>;
+				bias-disable;
+			};
+		};
+
+		irda_tx_sleep {
+			/*qcom,pins = <&gp 16>;*/
+			pins = "gpio16";
+			qcom,num-grp-pins = <1>;
+			qcom,pin-func = <0>;
+		        label = "irda_tx_sleep";
+			irda_tx_sleep: sleep {
+				drive-strength = <2>;
+				bias-disable;
+			};
+		};
+
+		irda_rx_active {
+			/*qcom,pins = <&gp 17>;*/
+			pins = "gpio17";
+			qcom,num-grp-pins = <1>;
+			qcom,pin-func = <2>;
+		        label = "irda_rx_active";
+			irda_rx_active: default {
+				drive-strength = <2>;
+				bias-pull-up;
+			};
+		};
+
+		irda_rx_sleep {
+			/*qcom,pins = <&gp 17>;*/
+			pins = "gpio17";
+			qcom,num-grp-pins = <1>;
+			qcom,pin-func = <0>;
+		        label = "irda_rx_sleep";
+			irda_rx_sleep: sleep {
+				drive-strength = <2>;
+				bias-pull-up;
+			};
+		};
+
+	};
+
+};

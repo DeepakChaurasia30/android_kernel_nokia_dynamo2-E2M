@@ -128,6 +128,13 @@
 		cont_splash_mem: splash_region@83000000 {
 			reg = <0x0 0x90000000 0x0 0x1400000>;
 		};
+
+		tzapp_mem: tzapp_region@0 {
+			compatible = "shared-dma-pool";
+			no-map;
+			reg = <0x0 0xc3c00000 0x0 0x1e00000>;
+		};
+
 	};
 
 	soc: soc { };
@@ -510,6 +517,18 @@
 				<86 512 500 800>;
 		status = "disabled";
 	};
+
+	/*Porting IRDA driver*/
+	blsp2_uart2: serial@7af0000 {
+		compatible = "qcom,msm-lsuart-v14";
+		reg = <0x7af0000 0x200>;
+		interrupts = <0 307 0>;
+		status = "disabled";
+		clocks = <&clock_gcc clk_gcc_blsp2_uart2_apps_clk>,
+		<&clock_gcc clk_gcc_blsp2_ahb_clk>;
+		clock-names = "core_clk", "iface_clk";
+	};
+	/*Porting IRDA driver*/
 
 	dma_blsp1: qcom,sps-dma@7884000 { /* BLSP1 */
 		#dma-cells = <4>;
@@ -1367,15 +1386,16 @@
 		qcom,ce-opp-freq = <100000000>;
 	};
 
-	qcom_seecom: qseecom@85b00000 {
+	qcom_seecom: qseecom@c3c00000 {
 		compatible = "qcom,qseecom";
-		reg = <0x85b00000 0x800000>;
+		reg = <0xc3c00000 0x1e00000>;
 		reg-names = "secapp-region";
 		qcom,hlos-num-ce-hw-instances = <1>;
 		qcom,hlos-ce-hw-instance = <0>;
 		qcom,qsee-ce-hw-instance = <0>;
 		qcom,disk-encrypt-pipe-pair = <2>;
 		qcom,support-fde;
+		qcom,appsbl-qseecom-support;
 		qcom,msm-bus,name = "qseecom-noc";
 		qcom,msm-bus,num-cases = <4>;
 		qcom,msm-bus,num-paths = <1>;
@@ -1652,6 +1672,8 @@
 		qcom,proxy-clock-names = "xo";
 		qcom,active-clock-names = "iface_clk", "bus_clk", "mem_clk";
 
+		qcom,pas-id = <5>;
+		qcom,pil-mss-memsetup;
 		qcom,firmware-name = "modem";
 		qcom,pil-self-auth;
 		qcom,override-acc-1 = <0x80800000>;

@@ -1,0 +1,40 @@
+/*
+ * Copyright (c) 2017, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+/dts-v1/;
+
+#include "msm8917-EVW.dtsi"
+#include "msm8917-pmi8940-mtp-EVW-MP4.dtsi"
+
+/ {
+	model = "Qualcomm Technologies, Inc. MSM8917-PMI8940 MTP - EVW MP4";
+	compatible = "qcom,msm8917-mtp", "qcom,msm8917", "qcom,mtp";
+	qcom,board-id = <163 0>;
+	qcom,msm-id = <303 0x5004>, <308 0x5004>, <309 0x5004>;
+	qcom,pmic-id = <0x10019 0x020040 0x0 0x0>;
+};
+
+/*
+ * qcom,board-id = <163 0>;
+ * >> CFG/HWID_EVW.csv:DeviceTree ID (163)
+ * >> board_hardware_id()
+ *    LINUX\android\bootable\bootloader\lk\platform\msm_shared\board.c
+ * >> EVW = 163
+ *
+ * qcom,msm-id = <303 0x5004>, <308 0x5004>, <309 0x5004>;
+ *                    ^^^^^^        ^^^^^^        ^^^^^^
+ * >> board_fih_soc_version()
+ *    LINUX\android\bootable\bootloader\lk\platform\msm_shared\board.c
+ * >> FIH_REV_MP4 = 0x5004
+ *
+ */

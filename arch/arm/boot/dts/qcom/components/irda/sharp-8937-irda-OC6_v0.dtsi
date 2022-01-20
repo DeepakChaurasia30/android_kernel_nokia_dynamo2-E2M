@@ -1,0 +1,55 @@
+/* sharp-8994-irda.dtsi (Infrared driver module)
+ *
+ * Copyright (C) 2009-2010 SHARP CORPORATION All rights reserved.
+ *
+ * This software is licensed under the terms of the GNU General Public
+ * License version 2, as published by the Free Software Foundation, and
+ * may be copied, distributed, and modified under those terms.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ */
+
+&soc {
+
+      blsp2_uart1: uart@7aef000 {
+      compatible = "qcom,msm-lsuart-v14";
+      reg = <0x7aef000 0x200>;
+      interrupts = <0 306 0>;
+      status = "ok";
+      clock-names = "core_clk", "iface_clk";
+      clocks = <&clock_gcc clk_gcc_blsp2_uart1_apps_clk>,
+			<&clock_gcc clk_gcc_blsp2_ahb_clk>;
+      };
+
+	sharp: shirda {
+		compatible = "qcom,shirda";
+		irda,sd-gpio = <&tlmm 61 0x00>;
+		irda,tx-gpio = <&tlmm 16 0x00>;
+		irda,rx-gpio = <&tlmm 17 0x00>;
+		vio_irda-supply = <&pm8937_l5>;
+		vcc_irda-supply = <&pm8937_l8>;
+		pinctrl-names = "default", "sleep", "active",
+				"rx-active", "tx-active";
+		pinctrl-0 = <&irda_sd_active &irda_tx_sleep &irda_rx_active>;
+		pinctrl-1 = <&irda_sd_active &irda_tx_sleep &irda_rx_sleep>;
+		pinctrl-2 = <&irda_sd_active &irda_tx_active &irda_rx_active>;
+		pinctrl-3 = <&irda_sd_active &irda_tx_sleep &irda_rx_active>;
+		pinctrl-4 = <&irda_sd_active &irda_tx_active &irda_rx_sleep>;
+
+		status = "ok";
+		clock-names = "core_clk", "iface_clk";
+		clocks = <&clock_gcc clk_gcc_blsp2_uart1_apps_clk>,
+			<&clock_gcc clk_gcc_blsp2_ahb_clk>;
+	};
+
+};
+
+&blsp2_uart1 {
+	status = "ok";
+	pinctrl-names = "default";
+	pinctrl-0 = <&uart2_console_active>;
+};
