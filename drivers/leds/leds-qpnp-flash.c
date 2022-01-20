@@ -1317,7 +1317,8 @@ static void qpnp_flash_led_work(struct work_struct *work)
 	brightness = flash_node->cdev.brightness;
 	if (!brightness)
 		goto turn_off;
-
+//misty fixed the bug for flash can't work
+#if 0
 	if (led->open_fault) {
 		if (flash_node->type == FLASH) {
 			dev_dbg(&led->spmi_dev->dev, "Open fault detected\n");
@@ -1344,7 +1345,7 @@ static void qpnp_flash_led_work(struct work_struct *work)
 			goto unlock_mutex;
 		}
 	}
-
+#endif
 	if (!flash_node->flash_on && flash_node->num_regulators > 0) {
 		rc = flash_regulator_enable(led, flash_node, true);
 		if (rc)
@@ -1825,8 +1826,8 @@ turn_off:
 				"Failed to read out fault status register\n");
 			goto exit_flash_led_work;
 		}
-
-		led->open_fault = (val & FLASH_LED_OPEN_FAULT_DETECTED);
+//misty
+		led->open_fault |= (val & FLASH_LED_OPEN_FAULT_DETECTED);
 	}
 
 	rc = qpnp_led_masked_write(led->spmi_dev,

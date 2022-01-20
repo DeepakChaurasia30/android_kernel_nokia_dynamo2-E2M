@@ -342,6 +342,15 @@ static int qpnp_wled_write_reg(struct qpnp_wled *wled, u8 *data, u16 addr)
 {
 	int rc;
 
+	//SW4-HL-Display-FixPR-D1C-5160-00+{_20161207
+	//PMIC WLED module enable/disable reg. is set too close (about 37us) and cause PMIC WLED is in wrong state.
+	//Add 5ms delay time when PMIC WLED module is disable to avoid WLED module control bit set enable/disable state at the same time.
+	if((addr==0xd846) && (*data==0))
+	{
+		msleep(5);
+	}
+	//SW4-HL-Display-FixPR-D1C-5160-00+}_20161207
+
 	rc = spmi_ext_register_writel(wled->spmi->ctrl, wled->spmi->sid,
 							addr, data, 1);
 	if (rc < 0)
@@ -1118,6 +1127,18 @@ static int qpnp_wled_sink_config(struct qpnp_wled *wled)
 
 		reg &= QPNP_WLED_CABC_MASK;
 		reg |= (wled->en_cabc << QPNP_WLED_CABC_SHIFT);
+		//SW4-HL-Display-EnablePmicAcceptPwmSignalAccordingToPanelCabcCommand*{_20161027
+		if(strstr(saved_command_line, " lcm-pwm-output-enabled")!=NULL)
+		{
+			reg |= (1 << QPNP_WLED_CABC_SHIFT);
+			pr_debug("\n\n*** [HL]%s: reg |= (1 << QPNP_WLED_CABC_SHIFT) ***\n\n", __func__);
+		}
+		else
+		{
+			reg |= (wled->en_cabc << QPNP_WLED_CABC_SHIFT);
+			pr_debug("\n\n*** [HL]%s: reg |= (%d << QPNP_WLED_CABC_SHIFT) ***\n\n", __func__, wled->en_cabc);
+		}
+		//SW4-HL-Display-EnablePmicAcceptPwmSignalAccordingToPanelCabcCommand*}_20161027
 		rc = qpnp_wled_write_reg(wled, &reg,
 					 QPNP_WLED_CABC_REG(wled->sink_base,
 							    wled->strings[i]));
