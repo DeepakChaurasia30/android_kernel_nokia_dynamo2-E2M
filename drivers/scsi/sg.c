@@ -402,6 +402,15 @@ sg_release(struct inode *inode, struct file *filp)
 	Sg_device *sdp;
 	Sg_fd *sfp;
 
+	if (unlikely(segment_eq(get_fs(), KERNEL_DS)))
+		return -EINVAL;
+
+	if (unlikely(segment_eq(get_fs(), KERNEL_DS)))
+		return -EINVAL;
+
+	if (unlikely(segment_eq(get_fs(), KERNEL_DS)))
+		return -EINVAL;
+
 	if ((!(sfp = (Sg_fd *) filp->private_data)) || (!(sdp = sfp->parentdp)))
 		return -ENXIO;
 	SCSI_LOG_TIMEOUT(3, sg_printk(KERN_INFO, sdp, "sg_release\n"));
