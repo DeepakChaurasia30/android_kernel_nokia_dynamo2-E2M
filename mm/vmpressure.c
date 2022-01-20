@@ -187,7 +187,8 @@ struct vmpressure_event {
 };
 
 static bool vmpressure_event(struct vmpressure *vmpr,
-			     unsigned long scanned, unsigned long reclaimed)
+				unsigned long scanned, unsigned long reclaimed,
+				unsigned long stall)
 {
 	struct vmpressure_event *ev;
 	enum vmpressure_levels level;
@@ -195,6 +196,7 @@ static bool vmpressure_event(struct vmpressure *vmpr,
 	bool signalled = false;
 
 	pressure = vmpressure_calc_pressure(scanned, reclaimed);
+	pressure = vmpressure_account_stall(pressure, stall, scanned);
 	level = vmpressure_level(pressure);
 
 	mutex_lock(&vmpr->events_lock);
@@ -216,6 +218,7 @@ static void vmpressure_work_fn(struct work_struct *work)
 	struct vmpressure *vmpr = work_to_vmpressure(work);
 	unsigned long scanned;
 	unsigned long reclaimed;
+	unsigned long stall;
 
 	spin_lock(&vmpr->sr_lock);
 	/*
@@ -233,12 +236,15 @@ static void vmpressure_work_fn(struct work_struct *work)
 	}
 
 	reclaimed = vmpr->reclaimed;
+	stall = vmpr->stall;
+
 	vmpr->scanned = 0;
 	vmpr->reclaimed = 0;
+	vmpr->stall = 0;
 	spin_unlock(&vmpr->sr_lock);
 
 	do {
-		if (vmpressure_event(vmpr, scanned, reclaimed))
+		if (vmpressure_event(vmpr, scanned, reclaimed, stall))
 			break;
 		/*
 		 * If not handled, propagate the event upward into the
@@ -282,6 +288,8 @@ void vmpressure_memcg(gfp_t gfp, struct mem_cgroup *memcg,
 	spin_lock(&vmpr->sr_lock);
 	vmpr->scanned += scanned;
 	vmpr->reclaimed += reclaimed;
+	if (!current_is_kswapd())
+		vmpr->stall += scanned;
 	scanned = vmpr->scanned;
 	spin_unlock(&vmpr->sr_lock);
 
