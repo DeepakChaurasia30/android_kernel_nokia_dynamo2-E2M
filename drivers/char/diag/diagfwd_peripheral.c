@@ -944,6 +944,12 @@ void diagfwd_channel_read(struct diagfwd_info *fwd_info)
 			temp_buf = fwd_info->buf_2;
 			atomic_set(&temp_buf->in_busy, 1);
 		}
+		if (read_buf) {
+			temp_buf = fwd_info->buf_2;
+			atomic_set(&temp_buf->in_busy, 1);
+	                DIAG_LOG(DIAG_DEBUG_PERIPHERALS,"diag:%s:%d:p=%d,t=%d : buf_2->in_busy= %d\n",
+                                __func__, __LINE__,fwd_info->peripheral, fwd_info->type, atomic_read(&(fwd_info->buf_2->in_busy)));
+		}
 	} else {
 		pr_debug("diag: In %s, both buffers are empty for p: %d, t: %d\n",
 			 __func__, fwd_info->peripheral, fwd_info->type);
